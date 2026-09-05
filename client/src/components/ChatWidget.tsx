@@ -8,6 +8,9 @@ import {
 } from '../api/chat';
 import { saveRow } from '../api/supabase';
 import { runPipeline, type PipelineResult } from '../sim/pipeline';
+import { buildRun, type FullRun } from '../sim/full';
+import { CATALOG, DEFAULT_DISEASE } from '../sim/catalog';
+import SimRun from './SimRun';
 
 interface Attachment {
   file: File;
@@ -19,6 +22,7 @@ interface UIMsg {
   role: 'user' | 'assistant';
   text: string;
   attachments?: { name: string; kind: 'image' | 'document' | 'methylation' }[];
+  sim?: FullRun;   // an animated simulator run rendered in place of text
 }
 
 const MAX_IMAGE_MB = 5;
@@ -103,6 +107,8 @@ export default function ChatWidget() {
   const [error, setError] = useState('');
   const [listening, setListening] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
+  const [simDisease, setSimDisease] = useState(DEFAULT_DISEASE.key);
+  const [simAge, setSimAge] = useState('');
   const [voiceLang, setVoiceLang] = useState(() => {
     try {
       return localStorage.getItem(LANG_KEY) || '';
@@ -239,7 +245,9 @@ export default function ChatWidget() {
   useEffect(() => {
     try {
       if (messages.length === 0) localStorage.removeItem(STORAGE_KEY);
-      else localStorage.setItem(STORAGE_KEY, JSON.stringify(messages.slice(-60)));
+      else localStorage.setItem(STORAGE_KEY, JSON.stringify(
+        messages.slice(-60).map((m) => (m.sim ? { role: m.role, text: '(simulation run)', attachments: m.attachments } : m)),
+      ));
     } catch {
       /* storage unavailable — ignore */
     }
@@ -314,10 +322,53 @@ export default function ChatWidget() {
     });
   };
 
+  // ---- animated on-device simulator run ----
+  const runSimulation = async (att: Attachment) => {
+    setError('');
+    let txt = '';
+    try { txt = await att.file.text(); } catch { setError('Could not read that methylation file.'); return; }
+    const dz = CATALOG.find((d) => d.key === simDisease) || DEFAULT_DISEASE;
+    const sample = att.file.name.replace(/\.[^.]+$/, '');
+    const run = buildRun(txt, { disease: dz, sample, chronologicalAge: simAge ? Number(simAge) : null, cycles: 1 });
+    if (!run.ok) { setError(run.error || 'Could not run the simulation on that file.'); return; }
+    setMessages((m) => [
+      ...m,
+      { role: 'user', text: `Run the simulator — ${dz.disease}${simAge ? `, age ${simAge}` : ''}`, attachments: [{ name: att.file.name, kind: 'methylation' }] },
+      { role: 'assistant', text: '', sim: run },
+    ]);
+    setInput('');
+    setAttachments([]);
+  };
+
+  // Hand the deterministic run summary to the model for a plain-language read-out.
+  const explainRun = async (summary: string) => {
+    if (!configured) {
+      setMessages((m) => [...m, { role: 'assistant', text: 'Connect the assistant to get a plain-language explanation — the results above are computed on your device.' }]);
+      return;
+    }
+    const history: ChatMessage[] = messages.map((m) => ({ role: m.role, content: m.sim ? '(simulation run shown above)' : m.text }));
+    history.push({ role: 'user', content: summary + '\n\nExplain this simulator run to the patient in clear, plain language — biological vs chronological age, the reprogramming projection, then the tumorigenicity safety envelope (why the dose is capped). Keep the research/illustrative framing; not a diagnosis.' });
+    setMessages((m) => [...m, { role: 'assistant', text: '' }]);
+    setBusy(true);
+    const ctrl = new AbortController(); abortRef.current = ctrl;
+    let acc = '';
+    try {
+      await streamChat({ messages: history, signal: ctrl.signal, mode: doctorMode ? 'doctor' : 'concise',
+        onText: (chunk) => { acc += chunk; setMessages((m) => { const c = [...m]; c[c.length - 1] = { ...c[c.length - 1], text: acc }; return c; }); } });
+      if (!acc.trim()) setMessages((m) => { const c = [...m]; c[c.length - 1] = { ...c[c.length - 1], text: '⚠️ No reply — tap to retry.' }; return c; });
+    } catch (e: any) {
+      setMessages((m) => { const c = [...m]; c[c.length - 1] = { ...c[c.length - 1], text: 'Could not reach the assistant just now.' }; return c; });
+    } finally { setBusy(false); }
+  };
+
   const send = async (preset?: string) => {
     const text = (preset ?? input).trim();
     if ((!text && attachments.length === 0) || busy) return;
     setError('');
+
+    // A methylation file → launch the animated simulator run (not a text dump).
+    const methAtt = attachments.find((a) => a.kind === 'methylation');
+    if (methAtt) { await runSimulation(methAtt); return; }
 
     if (!configured) {
       // The on-device pipeline still works without the chat backend — compute
@@ -602,19 +653,54 @@ export default function ChatWidget() {
                 </div>
               )}
               {messages.map((m, i) => (
-                <Bubble
-                  key={i}
-                  role={m.role}
-                  text={m.text}
-                  attachments={m.attachments}
-                  loading={busy && i === messages.length - 1 && m.role === 'assistant'}
-                />
+                m.sim ? (
+                  <div key={i} className="w-full"><SimRun run={m.sim} onExplain={explainRun} /></div>
+                ) : (
+                  <Bubble
+                    key={i}
+                    role={m.role}
+                    text={m.text}
+                    attachments={m.attachments}
+                    loading={busy && i === messages.length - 1 && m.role === 'assistant'}
+                  />
+                )
               ))}
             </div>
 
             {/* Composer */}
             <div className="border-t border-cream-300 bg-white p-3">
               {error && <p className="mb-2 text-xs font-semibold text-red-600">{error}</p>}
+              {attachments.some((a) => a.kind === 'methylation') && (
+                <div className="mb-2 rounded-xl border border-clay-200 bg-clay-50 p-3">
+                  <p className="mb-2 text-xs font-bold text-clay-700">🧬 Run the Protocol Simulator</p>
+                  <label className="mb-1 block text-[11px] font-semibold text-ink-800">Disease / therapy to develop for</label>
+                  <select
+                    value={simDisease}
+                    onChange={(e) => setSimDisease(e.target.value)}
+                    className="mb-2 w-full rounded-lg border border-cream-300 bg-white px-2 py-1.5 text-sm font-semibold text-ink-900 focus:border-clay-400 focus:outline-none"
+                  >
+                    {CATALOG.map((d) => (
+                      <option key={d.key} value={d.key}>{d.disease} · {d.department}</option>
+                    ))}
+                  </select>
+                  <div className="flex items-center gap-2">
+                    <input
+                      value={simAge}
+                      onChange={(e) => setSimAge(e.target.value.replace(/[^0-9]/g, ''))}
+                      inputMode="numeric"
+                      placeholder="Chronological age (optional)"
+                      className="w-full rounded-lg border border-cream-300 bg-white px-2 py-1.5 text-sm text-ink-900 placeholder:text-ink-700/40 focus:border-clay-400 focus:outline-none"
+                    />
+                    <button
+                      onClick={() => { const a = attachments.find((x) => x.kind === 'methylation'); if (a) runSimulation(a); }}
+                      className="shrink-0 rounded-lg bg-clay-500 px-4 py-1.5 text-sm font-bold text-white transition hover:bg-clay-600"
+                    >
+                      Run ▶
+                    </button>
+                  </div>
+                  <p className="mt-1.5 text-[10.5px] text-ink-700/55">7 auto steps · runs on your device · rest is automatic.</p>
+                </div>
+              )}
               {attachments.length > 0 && (
                 <div className="mb-2 flex flex-wrap gap-2">
                   {attachments.map((a, i) => (
