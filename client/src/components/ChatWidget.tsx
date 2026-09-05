@@ -7,29 +7,51 @@ import {
   type ContentBlock,
 } from '../api/chat';
 import { saveRow } from '../api/supabase';
+import { runPipeline, type PipelineResult } from '../sim/pipeline';
 
 interface Attachment {
   file: File;
-  kind: 'image' | 'document';
+  kind: 'image' | 'document' | 'methylation';
   previewUrl?: string;
 }
 
 interface UIMsg {
   role: 'user' | 'assistant';
   text: string;
-  attachments?: { name: string; kind: 'image' | 'document' }[];
+  attachments?: { name: string; kind: 'image' | 'document' | 'methylation' }[];
 }
 
 const MAX_IMAGE_MB = 5;
 const MAX_PDF_MB = 10;
+const MAX_METH_MB = 40;
+// Methylation inputs the browser pipeline can read (array beta CSV or bisulfite .cov/bedGraph).
+const METH_EXT = /\.(csv|cov|tsv|txt|bedgraph|bed)$/i;
 const GREETING =
-  "Hi — I'm the StemCells Protocol assistant. Ask about our therapies, recovery and post-operative care, or medications. You can also 📎 attach an ECG, X-ray/MRI, prescription or lab report and I'll explain it in simple words. This is educational support, not a diagnosis — AI can misread scans, so always confirm with your doctor.";
+  "Hi — I'm the StemCells Protocol assistant. Ask about our therapies, or 🧬 attach your DNA-methylation file (.csv / .cov) and I'll compute your biological age and a personalized reprogramming + safety envelope — on your device, your genome never leaves it. You can also 📎 attach an ECG, X-ray/MRI, prescription or lab report and I'll explain it in simple words. Educational / research support, not a diagnosis or medical advice.";
 
 const SUGGESTIONS = [
+  'Upload my DNA-methylation file (.csv/.cov)',
   'Upload an ECG — explain it simply',
-  'What does my prescription treat?',
   'What is Persona Reversal?',
 ];
+
+// Compact, deterministic summary of a pipeline run — this (never the raw file)
+// is what we hand the model to explain in plain language.
+function summarizePipeline(name: string, r: PipelineResult): string {
+  const ea = r.epigenetic_age; const rej = r.rejuvenation; const t = r.tumor;
+  const accel = ea.ageAcceleration != null ? `${ea.ageAcceleration >= 0 ? '+' : ''}${ea.ageAcceleration.toFixed(1)} yr` : 'not provided (no chronological age given)';
+  const top = r.targets.slice(0, 6).map((x) => `${x.cpg} (${x.gene || '-'}, ${x.direction})`).join(', ');
+  return [
+    `StemCells Protocol simulator — on-device run of "${name}" (raw genome NOT uploaded).`,
+    `Clock: ${ea.clock} · CpG coverage ${ea.nUsed}/${ea.nTotal} (${Math.round(ea.coverage * 100)}%).`,
+    `Biological (DNAm) age: ${ea.dnamAge.toFixed(1)} yr. Chronological age: ${ea.chronologicalAge ?? 'not provided'}. Age acceleration: ${accel}.`,
+    `Reprogramming projection (${rej.tissue_key} tissue, ${rej.cycles} cycle): ${ea.dnamAge.toFixed(1)} → ${rej.projected_age} yr (−${rej.years_reversed} yr), tissue rejuvenation index ${rej.tissue_rejuvenation_index}%.`,
+    `Tumorigenicity safety envelope: ${t.risk_tier} tier, ~${Math.round(t.estimated_risk * 100)}% over-induction risk at ${t.requested_cycles} cycle(s); max safe cycles ${t.max_safe_cycles}; tissue proliferation ${t.tissue_proliferation_factor}× (${t.tissue_key}).`,
+    t.flags.length ? `Flags: ${t.flags.join(' ')}` : '',
+    `Top target CpGs: ${top}.`,
+    `Framing: research/illustrative — the age-reversal figure is a model projection, not a measured outcome; the safety envelope estimates and mitigates tumorigenicity risk, it does not eliminate it. Not medical advice.`,
+  ].filter(Boolean).join('\n');
+}
 
 // Language code (for speech) → English name (for the reply instruction).
 const LANG_NAME: Record<string, string> = {
@@ -256,8 +278,9 @@ export default function ChatWidget() {
     for (const file of Array.from(files)) {
       const isImage = file.type.startsWith('image/');
       const isPdf = file.type === 'application/pdf';
-      if (!isImage && !isPdf) {
-        setError('Only images and PDF files are supported.');
+      const isMeth = !isImage && !isPdf && METH_EXT.test(file.name);
+      if (!isImage && !isPdf && !isMeth) {
+        setError('Supported: DNA-methylation files (.csv/.cov/.tsv/.txt/.bedgraph), images, or PDF.');
         continue;
       }
       const mb = file.size / (1024 * 1024);
@@ -269,9 +292,13 @@ export default function ChatWidget() {
         setError(`PDFs must be under ${MAX_PDF_MB} MB.`);
         continue;
       }
+      if (isMeth && mb > MAX_METH_MB) {
+        setError(`Methylation files must be under ${MAX_METH_MB} MB (array beta CSV or targeted .cov).`);
+        continue;
+      }
       next.push({
         file,
-        kind: isImage ? 'image' : 'document',
+        kind: isImage ? 'image' : isMeth ? 'methylation' : 'document',
         previewUrl: isImage ? URL.createObjectURL(file) : undefined,
       });
     }
@@ -293,6 +320,23 @@ export default function ChatWidget() {
     setError('');
 
     if (!configured) {
+      // The on-device pipeline still works without the chat backend — compute
+      // and show the deterministic results locally.
+      const meth = attachments.find((a) => a.kind === 'methylation');
+      if (meth) {
+        try {
+          const txt = await meth.file.text();
+          const r = runPipeline(txt, { tissueKey: 'systemic', cycles: 1 });
+          setMessages((m) => [
+            ...m,
+            { role: 'user', text: text || '(methylation file)', attachments: [{ name: meth.file.name, kind: 'methylation' }] },
+            { role: 'assistant', text: r.ok ? summarizePipeline(meth.file.name, r) : (r.error || 'Could not read that methylation file.') },
+          ]);
+          setInput('');
+          setAttachments([]);
+          return;
+        } catch { /* fall through to the generic message */ }
+      }
       setMessages((m) => [
         ...m,
         { role: 'user', text: text || '(attachment)' },
@@ -306,9 +350,27 @@ export default function ChatWidget() {
       return;
     }
 
-    // Build the content blocks for the API from text + attachments.
+    // Build the content blocks for the API from text + attachments. Methylation
+    // files are run through the on-device pipeline — the raw genome never leaves
+    // the browser; only the computed summary is sent to the model to explain.
     const blocks: ContentBlock[] = [];
     for (const a of attachments) {
+      if (a.kind === 'methylation') {
+        try {
+          const txt = await a.file.text();
+          const r = runPipeline(txt, { tissueKey: 'systemic', cycles: 1 });
+          if (!r.ok) { setError(r.error || 'Could not read that methylation file.'); return; }
+          blocks.push({
+            type: 'text',
+            text: summarizePipeline(a.file.name, r) +
+              '\n\nExplain these results to the patient in clear, plain language — biological vs chronological age, the reprogramming projection, then the tumorigenicity safety envelope (why the dose is capped). Keep the research/illustrative framing; do not present it as a diagnosis or treatment.',
+          });
+        } catch {
+          setError('Could not read that methylation file.');
+          return;
+        }
+        continue;
+      }
       try {
         const data = await fileToBase64(a.file);
         if (a.kind === 'image') {
@@ -641,7 +703,7 @@ export default function ChatWidget() {
                 <input
                   ref={fileRef}
                   type="file"
-                  accept="image/*,application/pdf"
+                  accept="image/*,application/pdf,.csv,.cov,.tsv,.txt,.bedgraph,.bed"
                   multiple
                   className="hidden"
                   onChange={(e) => pickFiles(e.target.files)}
@@ -720,7 +782,7 @@ function Bubble({
 }: {
   role: 'user' | 'assistant';
   text: string;
-  attachments?: { name: string; kind: 'image' | 'document' }[];
+  attachments?: { name: string; kind: 'image' | 'document' | 'methylation' }[];
   loading?: boolean;
 }) {
   const isUser = role === 'user';
