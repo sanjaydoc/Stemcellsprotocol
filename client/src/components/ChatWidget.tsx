@@ -27,11 +27,11 @@ const MAX_METH_MB = 40;
 // Methylation inputs the browser pipeline can read (array beta CSV or bisulfite .cov/bedGraph).
 const METH_EXT = /\.(csv|cov|tsv|txt|bedgraph|bed)$/i;
 const GREETING =
-  "Hi — I'm the StemCells Protocol assistant. Ask about our therapies, or 🧬 attach your DNA-methylation file (.csv / .cov) and I'll compute your biological age and a personalized reprogramming + safety envelope — on your device, your genome never leaves it. You can also 📎 attach an ECG, X-ray/MRI, prescription or lab report and I'll explain it in simple words. Educational / research support, not a diagnosis or medical advice.";
+  "Hi — I'm the StemCells Protocol assistant. Ask about our therapies, or 📎 attach an ECG, X-ray, MRI, CT, prescription or lab report and I'll explain it in simple words. You can also 🧬 attach your DNA-methylation file (.csv / .cov) and I'll compute your biological age and a personalized reprogramming + safety envelope — on your device, your genome never leaves it. Educational / research support, not a diagnosis or medical advice.";
 
 const SUGGESTIONS = [
+  'Explain my prescription, X-ray, MRI or CT',
   'Upload my DNA-methylation file (.csv/.cov)',
-  'Upload an ECG — explain it simply',
   'What is Persona Reversal?',
 ];
 
