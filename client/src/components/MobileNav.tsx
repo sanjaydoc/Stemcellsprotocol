@@ -47,6 +47,7 @@ const menuSections: MenuSection[] = [
       ['Immune-cell therapies', '/browse?body_type=Immune cell'],
     ],
   },
+  { title: 'Our mission', to: '/mission' },
   { title: 'Protocol Simulator', to: '/simulator' },
   { title: 'Clinical trials & research', to: '/research' },
   { title: 'Care packages & financing', to: '/care' },

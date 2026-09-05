@@ -3,6 +3,7 @@ import InstallButton from './InstallButton';
 
 const linkCols = [
   [
+    { label: 'Our mission', to: '/mission' },
     { label: 'About us', to: '/about' },
     { label: 'Our specialists', to: '/specialists' },
     { label: 'Research & trials', to: '/research' },
