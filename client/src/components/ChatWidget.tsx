@@ -711,6 +711,7 @@ export default function ChatWidget() {
                 <button
                   onClick={() => fileRef.current?.click()}
                   aria-label="Attach a file"
+                  title="Attach a DNA-methylation file (array beta .csv with cg IDs, or a .cov/bedGraph), or an ECG / scan / report (image, PDF)"
                   className="grid h-11 w-11 shrink-0 place-items-center rounded-xl border border-cream-300 text-ink-700/70 transition hover:border-clay-400 hover:text-clay-600"
                 >
                   <ClipIcon />
@@ -762,7 +763,10 @@ export default function ChatWidget() {
                   </button>
                 )}
               </div>
-              <p className="mt-2 text-center text-[11px] leading-tight text-ink-700/50">
+              <p className="mt-2 text-center text-[11px] leading-tight text-ink-700/55">
+                🧬 Methylation: an array beta <b>.csv</b> (cg IDs + values) or a bisulfite <b>.cov</b>/bedGraph — runs on your device.
+              </p>
+              <p className="mt-1 text-center text-[11px] leading-tight text-ink-700/50">
                 AI can be inaccurate. Not a diagnosis or prescription. For emergencies call your local
                 emergency number.
               </p>
