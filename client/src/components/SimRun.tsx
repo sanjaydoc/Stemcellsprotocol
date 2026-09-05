@@ -130,6 +130,13 @@ function StepCard({ i, run, rej, t, cycles, onStep, active, revealed }: {
                 </div>
               </div>
               <div style={{ marginTop: 8, fontSize: 11, color: '#9fb4d8' }}>Top drivers: {run.targets.slice(0, 5).map((x: any) => x.gene || x.cpg).join(' · ')}</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10, background: 'rgba(255,255,255,.04)', border: '1px solid rgba(66,133,244,.25)', borderRadius: 10, padding: '7px 10px', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 11.5, fontWeight: 700, color: '#dbe8ff' }}>Reprogramming cycles</span>
+                <button aria-label="fewer cycles" onClick={() => onStep(-1)} disabled={cycles <= 1} style={{ ...stepBtn, opacity: cycles <= 1 ? 0.4 : 1 }}>−</button>
+                <span style={{ minWidth: 18, textAlign: 'center', fontSize: 15, fontWeight: 800, color: '#fff' }}>{cycles}</span>
+                <button aria-label="more cycles" onClick={() => onStep(1)} disabled={cycles >= 10} style={{ ...stepBtn, opacity: cycles >= 10 ? 0.4 : 1 }}>+</button>
+                <span style={{ fontSize: 11.5, color: '#cdd8ee' }}>{ea.dnam_age} → <b style={{ color: '#4ade80' }}>{rej.projected_age} yr</b> after {cycles} cycle{cycles > 1 ? 's' : ''} (−{rej.years_reversed} yr)</span>
+              </div>
             </div>
           )}
           {i === 3 && (
