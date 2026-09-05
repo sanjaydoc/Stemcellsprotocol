@@ -83,7 +83,8 @@ export interface ParseResult { betas: Record<string, number>; matched: number; t
 
 export function parseMethylation(text: string): ParseResult {
   const total = SITES.length;
-  const lines = text.split(/\r?\n/).filter((l) => l.length > 0);
+  // Ignore blank lines and '#' comment/note lines (samples carry an age/disease header).
+  const lines = text.split(/\r?\n/).filter((l) => l.length > 0 && !l.startsWith('#'));
   if (!lines.length) return { betas: {}, matched: 0, total, coverage: 0, format: 'empty' };
 
   const first = lines[0];

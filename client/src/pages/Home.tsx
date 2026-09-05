@@ -323,6 +323,40 @@ export default function Home() {
             <ChatWidget />
           </div>
 
+          {/* Try the simulator with a sample DNA-methylation file */}
+          <div className="mt-4 max-w-2xl rounded-2xl bg-white/5 p-4 ring-1 ring-white/10 backdrop-blur">
+            <p className="text-sm font-semibold text-white/90">
+              🧬 New here? Download a sample DNA-methylation file, then tap 📎 in the assistant above and attach it to run the simulator.
+            </p>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              {[
+                { href: `${import.meta.env.BASE_URL}samples/sample1_age64_chronic_kidney_disease.cov`, name: 'Sample 1 · Age 64', sub: 'Chronic Kidney Disease · DNAm age ~74' },
+                { href: `${import.meta.env.BASE_URL}samples/sample2_age47_multiple_sclerosis.cov`, name: 'Sample 2 · Age 47', sub: 'Multiple Sclerosis · DNAm age ~56' },
+              ].map((s) => (
+                <a
+                  key={s.href}
+                  href={s.href}
+                  download
+                  className="flex items-center gap-3 rounded-xl bg-white/5 p-3 ring-1 ring-white/10 transition hover:bg-white/10"
+                >
+                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-clay-500 text-white">
+                    <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2.2">
+                      <path d="M12 3v12m0 0l-4-4m4 4l4-4" strokeLinecap="round" strokeLinejoin="round" />
+                      <path d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2" strokeLinecap="round" />
+                    </svg>
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-sm font-bold text-white">{s.name}</span>
+                    <span className="block truncate text-xs text-white/60">{s.sub}</span>
+                  </span>
+                </a>
+              ))}
+            </div>
+            <p className="mt-2 text-[11px] text-white/45">
+              Synthetic test files (.cov) — not real genomes. Age &amp; condition are noted inside each file.
+            </p>
+          </div>
+
           {/* Tabbed search card */}
           <div className="max-w-2xl overflow-hidden rounded-3xl bg-white/5 p-5 shadow-card ring-1 ring-white/10 backdrop-blur sm:p-7">
             <div className="flex gap-5 border-b border-white/10 sm:gap-8">
