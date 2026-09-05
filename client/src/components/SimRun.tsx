@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { FullRun } from '../sim/full';
 import { summarizeRun } from '../sim/full';
 import { exportSimPdf } from '../sim/pdf';
+import { projectRejuvenation, tumorSafety } from '../sim/pipeline';
 
 /* Animated, sci-fi 7-step simulator run rendered inside the chat.
    Plays each step in sequence: scan → reveal, with count-ups and mini-charts. */
@@ -70,14 +71,17 @@ function GeneMap({ vector }: { vector: any }) {
   );
 }
 
-function StepCard({ i, run, active, revealed }: { i: number; run: FullRun; active: boolean; revealed: boolean }) {
+function StepCard({ i, run, rej, t, cycles, onStep, active, revealed }: {
+  i: number; run: FullRun; rej: any; t: any; cycles: number; onStep: (d: number) => void; active: boolean; revealed: boolean;
+}) {
   const s = STEPS[i];
-  const ea = run.epigenetic_age, rej = run.rejuvenation, t = run.tumor;
+  const ea = run.epigenetic_age;
   const dnam = useCountUp(ea.dnam_age, active && i === 2, 900, 1);
-  const risk = useCountUp(Math.round(t.estimated_risk * 100), active && i === 6, 700);
   const cov = useCountUp(run.coverage_pct, active && i === 1, 700);
+  const risk = Math.round(t.estimated_risk * 100); // live (updates with the cycles stepper)
   const state = revealed ? 'revealed' : active ? 'scanning' : 'pending';
   const tierColor = t.risk_tier === 'Low' ? '#4ade80' : t.risk_tier === 'High' ? '#f87171' : '#fbbf24';
+  const stepBtn = { width: 26, height: 26, borderRadius: 99, border: '1px solid rgba(66,133,244,.5)', background: 'rgba(66,133,244,.12)', color: '#bcd3ff', fontSize: 16, fontWeight: 700, cursor: 'pointer', lineHeight: '22px' } as const;
 
   return (
     <div style={{
@@ -155,6 +159,13 @@ function StepCard({ i, run, active, revealed }: { i: number; run: FullRun; activ
           )}
           {i === 6 && (
             <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10, background: 'rgba(255,255,255,.04)', border: '1px solid rgba(66,133,244,.25)', borderRadius: 10, padding: '7px 10px' }}>
+                <span style={{ fontSize: 11.5, fontWeight: 700, color: '#dbe8ff' }}>Reprogramming cycles</span>
+                <button aria-label="fewer cycles" onClick={() => onStep(-1)} disabled={cycles <= 1} style={{ ...stepBtn, opacity: cycles <= 1 ? 0.4 : 1 }}>−</button>
+                <span style={{ minWidth: 18, textAlign: 'center', fontSize: 15, fontWeight: 800, color: '#fff' }}>{cycles}</span>
+                <button aria-label="more cycles" onClick={() => onStep(1)} disabled={cycles >= 10} style={{ ...stepBtn, opacity: cycles >= 10 ? 0.4 : 1 }}>+</button>
+                <span style={{ fontSize: 10.5, color: '#9fb4d8', marginLeft: 4 }}>step up to watch over-induction risk climb</span>
+              </div>
               <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 8 }}>
                 <div><div style={{ fontSize: 22, fontWeight: 800, color: tierColor, lineHeight: 1 }}>{t.risk_tier}</div><div style={{ fontSize: 10, color: '#9fb4d8' }}>RISK TIER</div></div>
                 <div><div style={{ fontSize: 22, fontWeight: 800, color: tierColor, lineHeight: 1 }}>{risk}%</div><div style={{ fontSize: 10, color: '#9fb4d8' }}>@ {t.requested_cycles} CYCLE</div></div>
@@ -189,6 +200,17 @@ export default function SimRun({ run, onExplain, instant, onDone }: { run: FullR
   const [done, setDone] = useState(skip);
   const timers = useRef<number[]>([]);
 
+  // Live cycles stepper (Step 7) — recompute projection + tumour envelope.
+  const ea = run.epigenetic_age;
+  const tk = run.rejuvenation?.tissue_key || run.tumor?.tissue_key || 'systemic';
+  const [cycles, setCycles] = useState<number>(run.rejuvenation?.cycles || 1);
+  const rej = useMemo(() => projectRejuvenation(ea.dnam_age, ea.coverage, tk, cycles), [cycles, ea.dnam_age, ea.coverage, tk]);
+  const tumor = useMemo(() => tumorSafety({
+    dnamAge: ea.dnam_age, ageAcceleration: ea.age_acceleration, coverage: ea.coverage,
+    youthSetpoint: rej.youth_setpoint, efficiency: rej.efficiency, tissueKey: tk, cycles,
+  }), [cycles, rej, ea, tk]);
+  const stepCycles = (d: number) => setCycles((c) => Math.max(1, Math.min(10, c + d)));
+
   useEffect(() => {
     if (skip) { onDone?.(); return; }
     let i = 0;
@@ -207,8 +229,8 @@ export default function SimRun({ run, onExplain, instant, onDone }: { run: FullR
   const pdf = () => {
     exportSimPdf({
       disease: run.disease, sample: run.sample, chronological_age: run.chronological_age,
-      epigenetic_age: run.epigenetic_age, targets: run.targets, rejuvenation: run.rejuvenation,
-      construct: run.construct, safety: run.safety, tumor: run.tumor,
+      epigenetic_age: run.epigenetic_age, targets: run.targets, rejuvenation: rej,
+      construct: run.construct, safety: run.safety, tumor,
     }, `StemCells-Simulator-${run.sample}.pdf`);
   };
 
@@ -233,14 +255,14 @@ export default function SimRun({ run, onExplain, instant, onDone }: { run: FullR
 
       <div>
         {STEPS.map((_, i) => (
-          <StepCard key={i} i={i} run={run} active={active === i} revealed={i < revealed} />
+          <StepCard key={i} i={i} run={run} rej={rej} t={tumor} cycles={cycles} onStep={stepCycles} active={active === i} revealed={i < revealed} />
         ))}
       </div>
 
       {done && (
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12, paddingTop: 12, borderTop: '1px solid rgba(255,255,255,.12)' }}>
           <button onClick={pdf} style={{ background: 'linear-gradient(90deg,#4285F4,#22d3ee)', color: '#04122e', fontWeight: 700, border: 0, borderRadius: 9, padding: '8px 14px', fontSize: 12.5, cursor: 'pointer' }}>⬇ Export PDF</button>
-          {onExplain && <button onClick={() => onExplain(summarizeRun(run))} style={{ background: 'transparent', color: '#bcd3ff', border: '1px solid rgba(66,133,244,.45)', borderRadius: 9, padding: '8px 14px', fontSize: 12.5, cursor: 'pointer' }}>💬 Explain in plain language</button>}
+          {onExplain && <button onClick={() => onExplain(summarizeRun({ ...run, rejuvenation: rej, tumor }))} style={{ background: 'transparent', color: '#bcd3ff', border: '1px solid rgba(66,133,244,.45)', borderRadius: 9, padding: '8px 14px', fontSize: 12.5, cursor: 'pointer' }}>💬 Explain in plain language</button>}
         </div>
       )}
       <div style={{ fontSize: 10, color: '#7d93b8', marginTop: 10 }}>Research / illustrative — computed on your device. Not medical advice.</div>
