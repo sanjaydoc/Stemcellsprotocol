@@ -182,17 +182,18 @@ function StepCard({ i, run, active, revealed }: { i: number; run: FullRun; activ
   );
 }
 
-export default function SimRun({ run, onExplain }: { run: FullRun; onExplain?: (summary: string) => void }) {
-  const [revealed, setRevealed] = useState(prefersReduced ? STEPS.length : 0);
-  const [active, setActive] = useState(prefersReduced ? -1 : 0);
-  const [done, setDone] = useState(prefersReduced);
+export default function SimRun({ run, onExplain, instant, onDone }: { run: FullRun; onExplain?: (summary: string) => void; instant?: boolean; onDone?: () => void }) {
+  const skip = prefersReduced || !!instant;
+  const [revealed, setRevealed] = useState(skip ? STEPS.length : 0);
+  const [active, setActive] = useState(skip ? -1 : 0);
+  const [done, setDone] = useState(skip);
   const timers = useRef<number[]>([]);
 
   useEffect(() => {
-    if (prefersReduced) { setDone(true); return; }
+    if (skip) { onDone?.(); return; }
     let i = 0;
     const step = () => {
-      if (i >= STEPS.length) { setActive(-1); setDone(true); return; }
+      if (i >= STEPS.length) { setActive(-1); setDone(true); onDone?.(); return; }
       setActive(i);
       timers.current.push(window.setTimeout(() => {
         setRevealed(i + 1); i += 1;

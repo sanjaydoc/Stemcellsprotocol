@@ -22,7 +22,8 @@ interface UIMsg {
   role: 'user' | 'assistant';
   text: string;
   attachments?: { name: string; kind: 'image' | 'document' | 'methylation' }[];
-  sim?: FullRun;   // an animated simulator run rendered in place of text
+  sim?: FullRun;      // an animated simulator run rendered in place of text
+  simSeen?: boolean;  // true once its animation has played — restore it instantly
 }
 
 const MAX_IMAGE_MB = 5;
@@ -92,7 +93,9 @@ function loadMessages(): UIMsg[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     const parsed = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed) ? parsed : [];
+    if (!Array.isArray(parsed)) return [];
+    // Restored simulator runs render instantly (no replay).
+    return parsed.map((m: any) => (m && m.sim ? { ...m, simSeen: true } : m));
   } catch {
     return [];
   }
@@ -245,9 +248,7 @@ export default function ChatWidget() {
   useEffect(() => {
     try {
       if (messages.length === 0) localStorage.removeItem(STORAGE_KEY);
-      else localStorage.setItem(STORAGE_KEY, JSON.stringify(
-        messages.slice(-60).map((m) => (m.sim ? { role: m.role, text: '(simulation run)', attachments: m.attachments } : m)),
-      ));
+      else localStorage.setItem(STORAGE_KEY, JSON.stringify(messages.slice(-60)));
     } catch {
       /* storage unavailable — ignore */
     }
@@ -654,7 +655,14 @@ export default function ChatWidget() {
               )}
               {messages.map((m, i) => (
                 m.sim ? (
-                  <div key={i} className="w-full"><SimRun run={m.sim} onExplain={explainRun} /></div>
+                  <div key={i} className="w-full">
+                    <SimRun
+                      run={m.sim}
+                      onExplain={explainRun}
+                      instant={!!m.simSeen}
+                      onDone={() => setMessages((mm) => (mm[i] && mm[i].sim && !mm[i].simSeen ? mm.map((x, xi) => (xi === i ? { ...x, simSeen: true } : x)) : mm))}
+                    />
+                  </div>
                 ) : (
                   <Bubble
                     key={i}
