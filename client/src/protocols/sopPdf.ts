@@ -74,6 +74,7 @@ export function exportSopPdf(p: Protocol) {
     ['Cell / product source', p.cellSource],
   ];
   if (p.route) meta.push(['Delivery route', p.route]);
+  if (p.regions) meta.push(['Notably practised', p.regions]);
   y += 4; kvTable(meta);
 
   // Sections

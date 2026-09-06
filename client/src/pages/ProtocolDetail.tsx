@@ -35,6 +35,11 @@ export default function ProtocolDetail() {
           <h1 className="mt-3 font-display text-3xl font-extrabold text-white sm:text-4xl">{p.name}</h1>
           {p.aka && <p className="mt-1 text-white/50">{p.aka}</p>}
           <p className="mt-3 max-w-2xl text-white/70">{p.indication}</p>
+          {p.regions && (
+            <p className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1 text-xs font-semibold text-white/80">
+              <Icon name="hospital" className="h-3.5 w-3.5" /> Notably practised: {p.regions}
+            </p>
+          )}
           <button
             type="button"
             onClick={() => exportSopPdf(p)}

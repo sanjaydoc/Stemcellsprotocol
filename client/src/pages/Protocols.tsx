@@ -18,7 +18,8 @@ export default function Protocols() {
     return PROTOCOLS.filter((p) =>
       (cat === 'ALL' || p.category === cat) &&
       (!query || p.code.toLowerCase().includes(query) || p.name.toLowerCase().includes(query) ||
-        p.indication.toLowerCase().includes(query) || (p.aka || '').toLowerCase().includes(query)));
+        p.indication.toLowerCase().includes(query) || (p.aka || '').toLowerCase().includes(query) ||
+        (p.regions || '').toLowerCase().includes(query)));
   }, [cat, q]);
 
   const counts = useMemo(() => {
@@ -124,6 +125,7 @@ function ProtocolCard({ p }: { p: Protocol }) {
       </div>
       <h3 className="mt-2 font-display text-base font-bold text-ink-900 group-hover:text-clay-700">{p.name}</h3>
       <p className="mt-1 line-clamp-2 text-sm text-ink-700/70">{p.indication}</p>
+      {p.regions && <p className="mt-2 text-[11px] font-semibold text-ink-700/45">📍 {p.regions}</p>}
       <div className="mt-3 flex items-center gap-2 text-xs text-ink-700/55">
         <span style={{ color: c.accent }}><Icon name={c.icon as IconName} className="h-4 w-4" /></span>
         {c.name}
