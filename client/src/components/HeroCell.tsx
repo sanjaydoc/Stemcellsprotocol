@@ -35,8 +35,8 @@ export default function HeroCell() {
       const rim = new THREE.PointLight(0x35d0c0, 0.8, 20); rim.position.set(-3, -1, -2); scene.add(rim);
 
       const group = new THREE.Group(); scene.add(group);
-      group.scale.setScalar(0.42);      // fits inside the target circle
-      group.position.y = 0.38;          // sit slightly above centre in the right zone
+      group.scale.setScalar(0.29);      // 30% smaller than before (was 0.42)
+      group.position.y = 0.55;          // pushed up a little in the right zone
 
       // helpers
       const rnd = (a: number, b: number) => a + Math.random() * (b - a);
