@@ -372,6 +372,44 @@ class SuccessBars(Flowable):
         c.restoreState()
 
 
+class AEBars(Flowable):
+    """Step 8 — per-class immune / adverse-event risk bars (label · tier · index)."""
+
+    def __init__(self, classes: list[dict]):
+        super().__init__()
+        self.classes = classes or []
+        self.row_h = 26
+        self.h = max(1, len(self.classes)) * self.row_h
+        self.width = CONTENT_W
+
+    def wrap(self, *_):
+        return (CONTENT_W, self.h)
+
+    def draw(self):
+        c = self.canv
+        c.saveState()
+        for i, cl in enumerate(self.classes):
+            y = self.h - (i + 1) * self.row_h + 4
+            col = _tier_color(cl.get("tier"))
+            c.setFillColor(INK)
+            c.setFont("Helvetica-Bold", 8.5)
+            c.drawString(2, y + 12, str(cl.get("label", "")))
+            c.setFillColor(col)
+            c.drawRightString(CONTENT_W - 2, y + 12, str(cl.get("tier", "")))
+            # bar
+            c.setFillColor(BG_SOFT)
+            c.roundRect(2, y + 4, CONTENT_W - 4, 6, 3, stroke=0, fill=1)
+            c.setFillColor(col)
+            frac = max(0.0, min(1.0, cl.get("index", 0)))
+            c.roundRect(2, y + 4, max(5, (CONTENT_W - 4) * frac), 6, 3, stroke=0, fill=1)
+            # symptoms
+            c.setFillColor(SUB)
+            c.setFont("Helvetica", 6.5)
+            sym = " · ".join((cl.get("symptoms") or [])[:5])
+            c.drawString(2, y - 3, sym[:120])
+        c.restoreState()
+
+
 def _feature_color(name: str) -> Color:
     n = (name or "").lower()
     if "itr" in n:
@@ -696,6 +734,42 @@ def build_pdf(payload: dict) -> bytes:
             block += [Spacer(1, 2), Paragraph(tum["summary"], body)]
         if tum.get("disclaimer"):
             block += [Spacer(1, 2), Paragraph(tum["disclaimer"], small)]
+        story += [KeepTogether(block), Spacer(1, 10)]
+
+    # ---- 8 · Immune & adverse-event safety envelope -------------------
+    imm = payload.get("immune") or {}
+    if imm and imm.get("classes"):
+        ic = _tier_color(imm.get("overall_tier"))
+        block = [SectionHeader("8", "Immune & adverse-event safety envelope", ic), Spacer(1, 4)]
+        head = f"Overall relative AE risk: <b>{imm.get('overall_tier')}</b>"
+        if imm.get("comorbidities"):
+            head += " &nbsp;·&nbsp; Comorbidities: " + ", ".join(imm["comorbidities"])
+        block += [Paragraph(head, body), Spacer(1, 4),
+                  AEBars(imm.get("classes")), Spacer(1, 6)]
+        # two honest columns: can't see / tests to ask
+        cant = "".join(f"• {x}<br/>" for x in (imm.get("cant_see") or [])[:4])
+        tests = "".join(f"• {x}<br/>" for x in (imm.get("tests_to_ask") or [])[:4])
+        two = Table([[Paragraph("<b>What this can't see</b><br/>" + cant, small),
+                      Paragraph("<b>Ask your clinician for</b><br/>" + tests, small)]],
+                    colWidths=[CONTENT_W / 2, CONTENT_W / 2])
+        two.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (0, 0), _tint(RED, 0.08)),
+            ("BACKGROUND", (1, 0), (1, 0), _tint(PRIMARY, 0.08)),
+            ("BOX", (0, 0), (0, 0), 0.5, _tint(RED, 0.4)),
+            ("BOX", (1, 0), (1, 0), 0.5, _tint(PRIMARY, 0.4)),
+            ("LEFTPADDING", (0, 0), (-1, -1), 6),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+            ("TOPPADDING", (0, 0), (-1, -1), 5),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ]))
+        block += [two]
+        if imm.get("modifiable"):
+            block += [Spacer(1, 3), Paragraph("<b>Modifiable:</b> " + "; ".join(imm["modifiable"]), small)]
+        if imm.get("summary"):
+            block += [Spacer(1, 2), Paragraph(imm["summary"], body)]
+        if imm.get("disclaimer"):
+            block += [Spacer(1, 2), Paragraph(imm["disclaimer"], small)]
         story += [KeepTogether(block), Spacer(1, 10)]
 
     # ---- Optional interpretation --------------------------------------

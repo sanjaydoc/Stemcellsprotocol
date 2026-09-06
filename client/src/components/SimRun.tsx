@@ -3,8 +3,9 @@ import type { FullRun } from '../sim/full';
 import { summarizeRun } from '../sim/full';
 import { exportSimPdf } from '../sim/pdf';
 import { projectRejuvenation, tumorSafety } from '../sim/pipeline';
+import { immuneSafety } from '../sim/immune';
 
-/* Animated, sci-fi 7-step simulator run rendered inside the chat.
+/* Animated, sci-fi 8-step simulator run rendered inside the chat.
    Plays each step in sequence: scan → reveal, with count-ups and mini-charts. */
 
 const STEPS = [
@@ -15,7 +16,10 @@ const STEPS = [
   { n: '05', tag: 'VECTOR', title: 'OSK construct' },
   { n: '06', tag: 'AVATAR', title: 'Safety pre-screen' },
   { n: '07', tag: 'SAFETY', title: 'Tumorigenicity envelope' },
+  { n: '08', tag: 'IMMUNE', title: 'Immune & adverse-event safety' },
 ];
+
+const IMM_TIER_COLOR = (t: string) => (t === 'Low' ? '#4ade80' : t === 'High' ? '#f87171' : '#fbbf24');
 const SCAN_MS = 780;
 const prefersReduced = typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -71,8 +75,8 @@ function GeneMap({ vector }: { vector: any }) {
   );
 }
 
-function StepCard({ i, run, rej, t, cycles, onStep, active, revealed }: {
-  i: number; run: FullRun; rej: any; t: any; cycles: number; onStep: (d: number) => void; active: boolean; revealed: boolean;
+function StepCard({ i, run, rej, t, im, cycles, onStep, active, revealed }: {
+  i: number; run: FullRun; rej: any; t: any; im: any; cycles: number; onStep: (d: number) => void; active: boolean; revealed: boolean;
 }) {
   const s = STEPS[i];
   const ea = run.epigenetic_age;
@@ -194,6 +198,51 @@ function StepCard({ i, run, rej, t, cycles, onStep, active, revealed }: {
               <div style={{ fontSize: 10, color: '#7d93b8', marginTop: 4 }}>Green ≤ {Math.round((t.risk_threshold || 0.15) * 100)}% · red &gt; threshold · cycles →</div>
             </div>
           )}
+          {i === 7 && im && (
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 8 }}>
+                <div>
+                  <div style={{ fontSize: 22, fontWeight: 800, color: IMM_TIER_COLOR(im.overall_tier), lineHeight: 1 }}>{im.overall_tier}</div>
+                  <div style={{ fontSize: 10, color: '#9fb4d8' }}>OVERALL AE RISK</div>
+                </div>
+                {im.comorbidities?.length > 0 && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginLeft: 4 }}>
+                    {im.comorbidities.map((c: string) => (
+                      <span key={c} style={{ background: 'rgba(251,191,36,.14)', color: '#fcd34d', border: '1px solid rgba(251,191,36,.35)', borderRadius: 99, padding: '2px 8px', fontSize: 10.5, fontWeight: 600 }}>{c}</span>
+                    ))}
+                  </div>
+                )}
+              </div>
+              {/* per-class risk bars */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+                {im.classes.map((c: any) => (
+                  <div key={c.key}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 3 }}>
+                      <span style={{ color: '#dbe8ff', fontWeight: 600 }}>{c.label}</span>
+                      <span style={{ fontWeight: 700, color: IMM_TIER_COLOR(c.tier) }}>{c.tier}</span>
+                    </div>
+                    <Bar pct={Math.round(c.index * 100)} color={IMM_TIER_COLOR(c.tier)} height={7} />
+                    <div style={{ fontSize: 10, color: '#8fa6cc', marginTop: 3 }}>{c.symptoms.slice(0, 4).join(' · ')}</div>
+                  </div>
+                ))}
+              </div>
+              {/* honesty: what it can't see + tests to ask */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 10 }}>
+                <div style={{ background: 'rgba(248,113,113,.06)', border: '1px solid rgba(248,113,113,.25)', borderRadius: 9, padding: '7px 9px' }}>
+                  <div style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '.08em', color: '#fca5a5', marginBottom: 3 }}>WHAT THIS CAN'T SEE</div>
+                  {im.cant_see.slice(0, 3).map((x: string) => <div key={x} style={{ fontSize: 10, color: '#cdd8ee', marginBottom: 2 }}>✗ {x}</div>)}
+                </div>
+                <div style={{ background: 'rgba(66,133,244,.08)', border: '1px solid rgba(66,133,244,.3)', borderRadius: 9, padding: '7px 9px' }}>
+                  <div style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '.08em', color: '#93c5fd', marginBottom: 3 }}>ASK YOUR CLINICIAN FOR</div>
+                  {im.tests_to_ask.slice(0, 3).map((x: string) => <div key={x} style={{ fontSize: 10, color: '#cdd8ee', marginBottom: 2 }}>• {x}</div>)}
+                </div>
+              </div>
+              {im.modifiable?.length > 0 && (
+                <div style={{ marginTop: 8, fontSize: 10.5, color: '#86efac' }}>↺ {im.modifiable[0]}</div>
+              )}
+              <div style={{ fontSize: 9.5, color: '#7d93b8', marginTop: 8, fontStyle: 'italic' }}>Relative, probabilistic — not a yes/no verdict. Informs the conversation with your clinician.</div>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -216,6 +265,10 @@ export default function SimRun({ run, onExplain, instant, onDone }: { run: FullR
     dnamAge: ea.dnam_age, ageAcceleration: ea.age_acceleration, coverage: ea.coverage,
     youthSetpoint: rej.youth_setpoint, efficiency: rej.efficiency, tissueKey: tk, cycles,
   }), [cycles, rej, ea, tk]);
+  const immune = useMemo(() => immuneSafety({
+    tissueKey: tk, department: run.disease?.department, ageAcceleration: ea.age_acceleration,
+    coverage: ea.coverage, cycles, comorbidities: run.comorbidities || [],
+  }), [cycles, ea, tk, run.disease, run.comorbidities]);
   const stepCycles = (d: number) => setCycles((c) => Math.max(1, Math.min(10, c + d)));
 
   useEffect(() => {
@@ -237,7 +290,7 @@ export default function SimRun({ run, onExplain, instant, onDone }: { run: FullR
     exportSimPdf({
       disease: run.disease, sample: run.sample, chronological_age: run.chronological_age,
       epigenetic_age: run.epigenetic_age, targets: run.targets, rejuvenation: rej,
-      construct: run.construct, safety: run.safety, tumor,
+      construct: run.construct, safety: run.safety, tumor, immune,
     }, `StemCells-Simulator-${run.sample}.pdf`);
   };
 
@@ -262,14 +315,14 @@ export default function SimRun({ run, onExplain, instant, onDone }: { run: FullR
 
       <div>
         {STEPS.map((_, i) => (
-          <StepCard key={i} i={i} run={run} rej={rej} t={tumor} cycles={cycles} onStep={stepCycles} active={active === i} revealed={i < revealed} />
+          <StepCard key={i} i={i} run={run} rej={rej} t={tumor} im={immune} cycles={cycles} onStep={stepCycles} active={active === i} revealed={i < revealed} />
         ))}
       </div>
 
       {done && (
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12, paddingTop: 12, borderTop: '1px solid rgba(255,255,255,.12)' }}>
           <button onClick={pdf} style={{ background: 'linear-gradient(90deg,#4285F4,#22d3ee)', color: '#04122e', fontWeight: 700, border: 0, borderRadius: 9, padding: '8px 14px', fontSize: 12.5, cursor: 'pointer' }}>⬇ Export PDF</button>
-          {onExplain && <button onClick={() => onExplain(summarizeRun({ ...run, rejuvenation: rej, tumor }))} style={{ background: 'transparent', color: '#bcd3ff', border: '1px solid rgba(66,133,244,.45)', borderRadius: 9, padding: '8px 14px', fontSize: 12.5, cursor: 'pointer' }}>💬 Explain in plain language</button>}
+          {onExplain && <button onClick={() => onExplain(summarizeRun({ ...run, rejuvenation: rej, tumor, immune }))} style={{ background: 'transparent', color: '#bcd3ff', border: '1px solid rgba(66,133,244,.45)', borderRadius: 9, padding: '8px 14px', fontSize: 12.5, cursor: 'pointer' }}>💬 Explain in plain language</button>}
         </div>
       )}
       <div style={{ fontSize: 10, color: '#7d93b8', marginTop: 10 }}>Research / illustrative — computed on your device. Not medical advice.</div>

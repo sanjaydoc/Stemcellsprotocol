@@ -10,6 +10,7 @@ import { saveRow } from '../api/supabase';
 import { runPipeline, type PipelineResult } from '../sim/pipeline';
 import { buildRun, type FullRun } from '../sim/full';
 import { CATALOG, DEFAULT_DISEASE } from '../sim/catalog';
+import { COMORBIDITIES, impliedComorbidity } from '../sim/immune';
 import SimRun from './SimRun';
 
 interface Attachment {
@@ -112,6 +113,7 @@ export default function ChatWidget() {
   const [exportOpen, setExportOpen] = useState(false);
   const [simDisease, setSimDisease] = useState(DEFAULT_DISEASE.key);
   const [simAge, setSimAge] = useState('');
+  const [simComorbid, setSimComorbid] = useState<string[]>([]);
   const [voiceLang, setVoiceLang] = useState(() => {
     try {
       return localStorage.getItem(LANG_KEY) || '';
@@ -330,7 +332,7 @@ export default function ChatWidget() {
     try { txt = await att.file.text(); } catch { setError('Could not read that methylation file.'); return; }
     const dz = CATALOG.find((d) => d.key === simDisease) || DEFAULT_DISEASE;
     const sample = att.file.name.replace(/\.[^.]+$/, '');
-    const run = buildRun(txt, { disease: dz, sample, chronologicalAge: simAge ? Number(simAge) : null, cycles: 1 });
+    const run = buildRun(txt, { disease: dz, sample, chronologicalAge: simAge ? Number(simAge) : null, cycles: 1, comorbidities: simComorbid });
     if (!run.ok) { setError(run.error || 'Could not run the simulation on that file.'); return; }
     setMessages((m) => [
       ...m,
@@ -706,7 +708,30 @@ export default function ChatWidget() {
                       Run ▶
                     </button>
                   </div>
-                  <p className="mt-1.5 text-[10.5px] text-ink-700/55">7 auto steps · runs on your device · rest is automatic.</p>
+                  <p className="mt-2 mb-1 text-[11px] font-semibold text-ink-800">Other conditions <span className="font-normal text-ink-700/50">(optional)</span></p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {(() => {
+                      const dz = CATALOG.find((d) => d.key === simDisease) || DEFAULT_DISEASE;
+                      const implied = impliedComorbidity(dz.department);
+                      return COMORBIDITIES.map((c) => {
+                        const auto = c.key === implied;
+                        const on = simComorbid.includes(c.key) || auto;
+                        return (
+                          <button
+                            key={c.key}
+                            type="button"
+                            disabled={auto}
+                            title={auto ? 'Implied by the selected indication' : ''}
+                            onClick={() => setSimComorbid((cur) => cur.includes(c.key) ? cur.filter((x) => x !== c.key) : [...cur, c.key])}
+                            className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold transition ${on ? 'border-clay-500 bg-clay-500 text-white' : 'border-cream-300 bg-white text-ink-800 hover:border-clay-400'}`}
+                          >
+                            {on ? '✓ ' : '+ '}{c.label}{auto ? ' · indication' : ''}
+                          </button>
+                        );
+                      });
+                    })()}
+                  </div>
+                  <p className="mt-1.5 text-[10.5px] text-ink-700/55">8 auto steps · runs on your device · rest is automatic.</p>
                 </div>
               )}
               {attachments.length > 0 && (

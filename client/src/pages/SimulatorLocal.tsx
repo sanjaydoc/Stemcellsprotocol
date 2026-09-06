@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import Icon from '../components/Icon';
 import SimHeaderBand from '../components/SimHeaderBand';
 import SimulatorChat from './SimulatorChat';
+import { COMORBIDITIES, impliedComorbidity } from '../sim/immune';
 import {
   analyze,
   assembleConstruct,
@@ -16,6 +17,7 @@ import {
   reportPdf,
   safetyPrescreen,
   tumorSafety,
+  immuneSafety,
   startBatch,
   startDatasetDownload,
   startDesign,
@@ -59,6 +61,9 @@ export default function SimulatorLocal() {
   const [safetyBusy, setSafetyBusy] = useState(false);
   const [tumor, setTumor] = useState<any>(null);           // Step 7 tumorigenicity envelope
   const [tumorBusy, setTumorBusy] = useState(false);
+  const [immune, setImmune] = useState<any>(null);         // Step 8 immune / adverse-event envelope
+  const [immuneBusy, setImmuneBusy] = useState(false);
+  const [comorbid, setComorbid] = useState<string[]>([]);  // Step 8 comorbidity multi-select
   const [analysis, setAnalysis] = useState<any>(null);
   const [construct, setConstruct] = useState<any>(null);
   const [ranked, setRanked] = useState<any>(null);
@@ -230,6 +235,7 @@ export default function SimulatorLocal() {
     setCycles(1);
     setSafety(null);
     setTumor(null);
+    setImmune(null);
     try {
       const res = await analyze({
         methylation: methFile,
@@ -318,7 +324,30 @@ export default function SimulatorLocal() {
     if (n === cycles) return;
     setCycles(n);
     if (tumor) runTumor(n);
+    if (immune) runImmune(n);
   };
+
+  const runImmune = async (n: number = cycles) => {
+    setImmuneBusy(true);
+    setError('');
+    try {
+      setImmune(await immuneSafety({
+        tissue_key: disease?.tissue_key,
+        department: disease?.department,
+        age_acceleration: ea?.age_acceleration,
+        coverage: ea?.coverage,
+        cycles: n,
+        comorbidities: comorbid,
+      }));
+    } catch (e: any) {
+      setError(e.message || 'Immune safety failed');
+    } finally {
+      setImmuneBusy(false);
+    }
+  };
+
+  const toggleComorbid = (key: string) =>
+    setComorbid((cur) => cur.includes(key) ? cur.filter((x) => x !== key) : [...cur, key]);
 
   const runDesign = async () => {
     setError('');
@@ -363,7 +392,7 @@ export default function SimulatorLocal() {
   };
 
   const extras = () => ({
-    safety, tumor, cycles, rejView,
+    safety, tumor, immune, cycles, rejView,
     sample: sample || datasetLabel || undefined,
     chronoAge: age ? Number(age) : null,
   });
@@ -621,6 +650,26 @@ export default function SimulatorLocal() {
                  onChange={(e) => setGenoFile(e.target.files?.[0] ?? null)} />
           <label className="mt-3 block text-sm font-semibold text-ink-800">Chronological age (optional)</label>
           <input value={age} onChange={(e) => setAge(e.target.value)} inputMode="numeric" placeholder="e.g. 39" className="input mt-1" />
+
+          {/* Other conditions — Step 8 immune / adverse-event modifiers */}
+          <label className="mt-3 block text-sm font-semibold text-ink-800">Other conditions <span className="font-normal text-ink-700/50">(optional)</span></label>
+          <div className="mt-1.5 flex flex-wrap gap-1.5">
+            {COMORBIDITIES.map((c) => {
+              const auto = c.key === impliedComorbidity(disease?.department);
+              const on = comorbid.includes(c.key) || auto;
+              return (
+                <button
+                  key={c.key} type="button" disabled={auto}
+                  title={auto ? 'Implied by the selected indication' : ''}
+                  onClick={() => toggleComorbid(c.key)}
+                  className={`rounded-full border px-2.5 py-1 text-xs font-semibold transition ${on ? 'border-clay-500 bg-clay-500 text-white' : 'border-cream-300 bg-white text-ink-800 hover:border-clay-400'}`}
+                >
+                  {on ? '✓ ' : '+ '}{c.label}{auto ? ' · indication' : ''}
+                </button>
+              );
+            })}
+          </div>
+
           <button onClick={runAnalyze} disabled={!canAnalyze || !!busy}
                   className="btn-primary mt-5 w-full py-3 disabled:opacity-50">
             {busy === 'Computing epigenetic age…' ? 'Computing…' : 'Compute epigenetic age'}
@@ -1130,6 +1179,86 @@ export default function SimulatorLocal() {
         </section>
       )}
 
+      {/* 8 · Immune & adverse-event safety envelope */}
+      {analysis && (
+        <section className="mt-6">
+          <div className="card p-6">
+            <h2 className="font-display text-lg font-bold text-ink-900">8 · Immune &amp; Adverse-Event Safety <span className="text-xs font-normal text-ink-700/50">· per-patient immune / inflammatory / embolic read</span></h2>
+            <p className="mt-1 text-sm text-ink-700/70">
+              The harms patients actually report from MSC / cell therapy are mostly <b>not</b> tumorigenicity — they're
+              swelling, pain, infusion reactions, clotting (IBMIR), immune flares and infection. This estimates a
+              <b> relative</b> per-class risk from the delivery route, your comorbidities, epigenetic age-acceleration and dose.
+              It's a probabilistic read to take to a clinician — <b>not a yes/no verdict</b>.
+            </p>
+
+            <button onClick={() => runImmune()} disabled={immuneBusy} className="btn-outline mt-3 px-5 py-2.5 disabled:opacity-50">
+              {immuneBusy ? 'Modelling…' : immune ? `Recompute (${cycles} dose${cycles > 1 ? 's' : ''})` : `Compute immune envelope (${cycles} dose${cycles > 1 ? 's' : ''})`}
+            </button>
+
+            {immune && (
+              <div className="mt-4 text-sm">
+                <div className="flex flex-wrap items-center gap-4">
+                  <Stat label="Overall AE risk" value={immune.overall_tier}
+                        tone={immune.overall_tier === 'Low' ? 'good' : immune.overall_tier === 'High' ? 'bad' : undefined} big />
+                  {immune.comorbidities?.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {immune.comorbidities.map((c: string) => (
+                        <span key={c} className="chip bg-amber-50 text-amber-800">{c}</span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* per-class risk bars */}
+                <div className="mt-4 space-y-2.5">
+                  {immune.classes.map((c: any) => {
+                    const col = c.tier === 'Low' ? '#16a34a' : c.tier === 'High' ? '#dc2626' : '#f59e0b';
+                    return (
+                      <div key={c.key}>
+                        <div className="flex justify-between text-xs">
+                          <span className="font-semibold text-ink-900">{c.label}</span>
+                          <span className="font-bold" style={{ color: col }}>{c.tier}</span>
+                        </div>
+                        <div className="mt-1 h-2 rounded-full bg-cream-200">
+                          <div className="h-2 rounded-full" style={{ width: `${Math.round(c.index * 100)}%`, background: col }} />
+                        </div>
+                        <p className="mt-0.5 text-[11px] text-ink-700/55">{c.symptoms.slice(0, 5).join(' · ')}</p>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                  <div className="rounded-xl border border-red-200 bg-red-50 p-3">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-red-700/80">What this can't see</p>
+                    <ul className="mt-1 space-y-1 text-xs text-ink-700/70">
+                      {immune.cant_see.map((d: string) => <li key={d}>✗ {d}</li>)}
+                    </ul>
+                  </div>
+                  <div className="rounded-xl border border-blue-200 bg-blue-50 p-3">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-blue-700/80">Ask your clinician for</p>
+                    <ul className="mt-1 space-y-1 text-xs text-ink-700/70">
+                      {immune.tests_to_ask.map((d: string) => <li key={d}>• {d}</li>)}
+                    </ul>
+                  </div>
+                </div>
+
+                {immune.modifiable?.length > 0 && (
+                  <div className="mt-3 rounded-xl border border-green-200 bg-green-50 p-3">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-green-700/80">Modifiable before therapy</p>
+                    <ul className="mt-1 space-y-1 text-xs text-green-900/90">
+                      {immune.modifiable.map((d: string) => <li key={d}>↺ {d}</li>)}
+                    </ul>
+                  </div>
+                )}
+                <p className="mt-2 text-sm font-semibold text-ink-900">{immune.summary}</p>
+                <p className="mt-1 text-[11px] italic text-ink-700/50">{immune.disclaimer}</p>
+              </div>
+            )}
+          </div>
+        </section>
+      )}
+
       {/* Export + interpret */}
       {analysis && (
         <section className="mt-6 flex flex-wrap items-center gap-3">
@@ -1201,9 +1330,9 @@ function buildPayload(
   ranked: any,
   interpretation?: string | null,
   disease?: DiseaseEntry | null,
-  extras?: { safety?: any; tumor?: any; cycles?: number; rejView?: any; sample?: string; chronoAge?: number | null },
+  extras?: { safety?: any; tumor?: any; immune?: any; cycles?: number; rejView?: any; sample?: string; chronoAge?: number | null },
 ) {
-  const { safety, tumor, cycles, rejView, sample, chronoAge } = extras || {};
+  const { safety, tumor, immune, cycles, rejView, sample, chronoAge } = extras || {};
   const rej = analysis?.rejuvenation;
   return {
     disease: disease ? { name: disease.disease, department: disease.department, tissue: disease.tissue, capsid: disease.capsid } : undefined,
@@ -1222,6 +1351,7 @@ function buildPayload(
     candidates: ranked?.candidates,
     safety: safety || undefined,     // Step 6 — avatar pre-screen
     tumor: tumor || undefined,       // Step 7 — tumorigenicity safety envelope
+    immune: immune || undefined,     // Step 8 — immune / adverse-event envelope
     interpretation: interpretation || undefined,
   };
 }

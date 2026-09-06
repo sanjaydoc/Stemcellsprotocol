@@ -193,6 +193,17 @@ export async function tumorSafety(spec: any = {}): Promise<any> {
   return res.json();
 }
 
+/** Step 8 — personalized immune / adverse-event safety envelope. */
+export async function immuneSafety(spec: any = {}): Promise<any> {
+  const res = await fetch(api('/api/immune_safety'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(spec),
+  });
+  if (!res.ok) throw new Error((await res.json()).detail || 'Immune safety failed');
+  return res.json();
+}
+
 /** Design an IV exosome carrier for a novel small molecule (Track B). */
 export async function deliverExosome(spec: any = {}): Promise<any> {
   const res = await fetch(api('/api/deliver/exosome'), {

@@ -255,6 +255,53 @@ export function exportSimPdf(p: any, filename = 'StemCells-Simulator-Report.pdf'
     if (tum.summary) { need(24); txt(INK); doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.text(doc.splitTextToSize(tum.summary, CW), M, y); y += 24; }
   }
 
+  // ---- §8 immune & adverse-event safety envelope ----
+  const imm = p.immune;
+  if (imm && imm.classes) {
+    const ic = tierColor(imm.overall_tier);
+    section('8', 'Immune & adverse-event safety envelope', ic);
+    // overall tier + comorbidity chips
+    need(24);
+    txt(INK); doc.setFont('helvetica', 'bold'); doc.setFontSize(9.5);
+    doc.text(`Overall relative AE risk: `, M, y + 4);
+    txt(ic); doc.text(String(imm.overall_tier), M + 118, y + 4);
+    if (imm.comorbidities?.length) {
+      txt(SUB); doc.setFont('helvetica', 'normal'); doc.setFontSize(8);
+      doc.text(doc.splitTextToSize(`Comorbidities: ${imm.comorbidities.join(', ')}`, CW - 170), M + 170, y + 4);
+    }
+    y += 16;
+    // per-class risk bars
+    imm.classes.forEach((c: any) => {
+      need(26);
+      const cc = tierColor(c.tier);
+      txt(INK); doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5); doc.text(c.label, M, y + 8);
+      txt(cc); doc.text(c.tier, M + CW, y + 8, { align: 'right' });
+      const x0 = M; const tw = CW; fill(BGSOFT); doc.roundedRect(x0, y + 11, tw, 7, 3.5, 3.5, 'F');
+      fill(cc); doc.roundedRect(x0, y + 11, Math.max(5, tw * Math.min(1, c.index)), 7, 3.5, 3.5, 'F');
+      txt(SUB); doc.setFont('helvetica', 'normal'); doc.setFontSize(7);
+      doc.text(doc.splitTextToSize((c.symptoms || []).slice(0, 5).join(' · '), CW).slice(0, 1), M, y + 26);
+      y += 30;
+    });
+    // two-column: can't see / tests to ask
+    need(70);
+    const colW = (CW - 10) / 2;
+    const box = (x: number, title: string, items: string[], accent: RGB) => {
+      fill(tint(accent, 0.08)); doc.roundedRect(x, y, colW, 66, 5, 5, 'F'); stroke(tint(accent, 0.4)); doc.setLineWidth(0.5); doc.roundedRect(x, y, colW, 66, 5, 5);
+      txt(accent); doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5); doc.text(title, x + 6, y + 11);
+      txt(INK); doc.setFont('helvetica', 'normal'); doc.setFontSize(7);
+      let yy = y + 20;
+      items.slice(0, 4).forEach((it) => { const ls = doc.splitTextToSize(`• ${it}`, colW - 12); doc.text(ls.slice(0, 2), x + 6, yy); yy += 5 * Math.min(2, ls.length) + 2; });
+    };
+    box(M, "WHAT THIS CAN'T SEE", imm.cant_see || [], RED);
+    box(M + colW + 10, 'ASK YOUR CLINICIAN FOR', imm.tests_to_ask || [], PRIMARY);
+    y += 72;
+    if (imm.modifiable?.length) {
+      need(16); txt(GREEN); doc.setFont('helvetica', 'normal'); doc.setFontSize(8);
+      doc.text(doc.splitTextToSize(`Modifiable: ${imm.modifiable[0]}`, CW), M, y + 4); y += 16;
+    }
+    if (imm.summary) { need(20); txt(INK); doc.setFont('helvetica', 'italic'); doc.setFontSize(8); doc.text(doc.splitTextToSize(imm.summary, CW), M, y + 4); y += 22; }
+  }
+
   // ---- disclaimer ----
   need(40);
   fill(tint(PRIMARY, 0.07)); doc.roundedRect(M, y, CW, 34, 4, 4, 'F'); stroke(tint(PRIMARY, 0.4)); doc.setLineWidth(0.5); doc.roundedRect(M, y, CW, 34, 4, 4);

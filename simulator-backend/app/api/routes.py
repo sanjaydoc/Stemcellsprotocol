@@ -45,7 +45,7 @@ from ..ingest import load_genotype, load_methylation
 from ..ingest.methylation import list_samples
 from ..jobs import manager
 from ..report import build_pdf, candidates_csv, interpret_results
-from ..scoring import rank_candidates
+from ..scoring import COMORBIDITIES, immune_safety, rank_candidates
 
 router = APIRouter()
 settings = get_settings()
@@ -671,6 +671,42 @@ async def tumor_safety(spec: dict = Body(default={})) -> dict:
         "epigenetic readout and published dose/tissue relationships, and require wet-lab and "
         "clinical validation.",
     }
+
+
+# --- Step 8: Immune & Adverse-Event Safety envelope --------------------------
+# The dominant reported harms of MSC / cell therapy are NOT tumorigenicity (that
+# is Step 7's iPSC/OSK concern) — they are inflammatory, embolic, immune and
+# procedural events (swelling, pain, infusion reactions, IBMIR clotting, disease
+# flares, infection). This estimates a per-patient, per-therapy RELATIVE risk
+# across those classes: route/tissue baseline x comorbidity modifiers x
+# epigenetic-inflammaging (age-acceleration) x dose. A methylation file is NOT a
+# genotype, so it CANNOT see HLA/clotting variants or the product/clinic — this
+# is a relative, probabilistic read, never a yes/no verdict. Not medical advice.
+@router.post("/immune_safety")
+async def immune_safety_route(spec: dict = Body(default={})) -> dict:
+    """Personalized immune / adverse-event safety envelope (Step 8)."""
+    try:
+        accel = float(spec["age_acceleration"]) if spec.get("age_acceleration") is not None else None
+    except (TypeError, ValueError):
+        accel = None
+    try:
+        coverage = float(spec.get("coverage", 1.0))
+    except (TypeError, ValueError):
+        coverage = 1.0
+    return immune_safety(
+        tissue_key=spec.get("tissue_key"),
+        department=spec.get("department"),
+        age_acceleration=accel,
+        coverage=coverage,
+        cycles=int(spec.get("cycles") or 1),
+        comorbidities=spec.get("comorbidities") or [],
+    )
+
+
+@router.get("/comorbidities")
+async def comorbidities() -> dict:
+    """The comorbidity options + labels the Step 8 multi-select offers."""
+    return {"comorbidities": COMORBIDITIES}
 
 
 @router.post("/deliver/exosome")

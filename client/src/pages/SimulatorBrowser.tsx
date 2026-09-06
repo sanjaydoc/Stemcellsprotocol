@@ -4,6 +4,7 @@ import SimHeaderBand from '../components/SimHeaderBand';
 import SimRun from '../components/SimRun';
 import { buildRun, type FullRun } from '../sim/full';
 import { CATALOG, DEFAULT_DISEASE } from '../sim/catalog';
+import { COMORBIDITIES, impliedComorbidity } from '../sim/immune';
 
 const METH_EXT = /\.(csv|cov|tsv|txt|bedgraph|bed)$/i;
 const SAMPLES = [
@@ -20,6 +21,7 @@ export default function SimulatorBrowser() {
   const [fileName, setFileName] = useState('');
   const [disease, setDisease] = useState(DEFAULT_DISEASE.key);
   const [age, setAge] = useState('');
+  const [comorbid, setComorbid] = useState<string[]>([]);
   const [run, setRun] = useState<FullRun | null>(null);
   const [error, setError] = useState('');
   const [runKey, setRunKey] = useState(0);     // remount SimRun to replay the animation
@@ -43,7 +45,7 @@ export default function SimulatorBrowser() {
   const start = () => {
     if (!text) { setError('Upload a methylation file or pick a sample first.'); return; }
     const dz = CATALOG.find((d) => d.key === disease) || DEFAULT_DISEASE;
-    const r = buildRun(text, { disease: dz, sample: fileName.replace(/\.[^.]+$/, ''), chronologicalAge: age ? Number(age) : null, cycles: 1 });
+    const r = buildRun(text, { disease: dz, sample: fileName.replace(/\.[^.]+$/, ''), chronologicalAge: age ? Number(age) : null, cycles: 1, comorbidities: comorbid });
     if (!r.ok) { setError(r.error || 'Could not run the simulation on that file.'); return; }
     setRun(r); setRunKey((k) => k + 1);
     setTimeout(() => document.getElementById('sim-result')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
@@ -104,6 +106,33 @@ export default function SimulatorBrowser() {
               <div>
                 <label className="block text-sm font-semibold text-ink-800">Chronological age <span className="font-normal text-ink-700/50">(optional)</span></label>
                 <input value={age} onChange={(e) => setAge(e.target.value.replace(/[^0-9]/g, ''))} inputMode="numeric" placeholder="e.g. 47" className="input mt-1 w-full" />
+              </div>
+            </div>
+
+            {/* Other conditions (Step 8 immune / adverse-event modifiers) */}
+            <div className="mt-5">
+              <label className="block text-sm font-semibold text-ink-800">Other conditions <span className="font-normal text-ink-700/50">(optional — sharpens the immune / adverse-event read)</span></label>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {(() => {
+                  const dz = CATALOG.find((d) => d.key === disease) || DEFAULT_DISEASE;
+                  const implied = impliedComorbidity(dz.department);
+                  return COMORBIDITIES.map((c) => {
+                    const auto = c.key === implied;
+                    const on = comorbid.includes(c.key) || auto;
+                    return (
+                      <button
+                        key={c.key}
+                        type="button"
+                        disabled={auto}
+                        onClick={() => setComorbid((cur) => cur.includes(c.key) ? cur.filter((x) => x !== c.key) : [...cur, c.key])}
+                        title={auto ? 'Implied by the selected indication' : ''}
+                        className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${on ? 'border-clay-500 bg-clay-500 text-white' : 'border-cream-300 bg-white text-ink-800 hover:border-clay-400'} ${auto ? 'opacity-90' : ''}`}
+                      >
+                        {on ? '✓ ' : '+ '}{c.label}{auto ? ' · indication' : ''}
+                      </button>
+                    );
+                  });
+                })()}
               </div>
             </div>
 
