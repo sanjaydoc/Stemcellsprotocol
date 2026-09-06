@@ -4,7 +4,8 @@ import SimHeaderBand from '../components/SimHeaderBand';
 import SimRun from '../components/SimRun';
 import { buildRun, type FullRun } from '../sim/full';
 import { CATALOG, DEFAULT_DISEASE } from '../sim/catalog';
-import { COMORBIDITIES, impliedComorbidity } from '../sim/immune';
+import { impliedCondition } from '../sim/immune';
+import ConditionPicker from '../components/ConditionPicker';
 
 const METH_EXT = /\.(csv|cov|tsv|txt|bedgraph|bed)$/i;
 const SAMPLES = [
@@ -111,28 +112,13 @@ export default function SimulatorBrowser() {
 
             {/* Other conditions (Step 8 immune / adverse-event modifiers) */}
             <div className="mt-5">
-              <label className="block text-sm font-semibold text-ink-800">Other conditions <span className="font-normal text-ink-700/50">(optional — sharpens the immune / adverse-event read)</span></label>
-              <div className="mt-2 flex flex-wrap gap-2">
-                {(() => {
-                  const dz = CATALOG.find((d) => d.key === disease) || DEFAULT_DISEASE;
-                  const implied = impliedComorbidity(dz.department);
-                  return COMORBIDITIES.map((c) => {
-                    const auto = c.key === implied;
-                    const on = comorbid.includes(c.key) || auto;
-                    return (
-                      <button
-                        key={c.key}
-                        type="button"
-                        disabled={auto}
-                        onClick={() => setComorbid((cur) => cur.includes(c.key) ? cur.filter((x) => x !== c.key) : [...cur, c.key])}
-                        title={auto ? 'Implied by the selected indication' : ''}
-                        className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${on ? 'border-clay-500 bg-clay-500 text-white' : 'border-cream-300 bg-white text-ink-800 hover:border-clay-400'} ${auto ? 'opacity-90' : ''}`}
-                      >
-                        {on ? '✓ ' : '+ '}{c.label}{auto ? ' · indication' : ''}
-                      </button>
-                    );
-                  });
-                })()}
+              <label className="block text-sm font-semibold text-ink-800">Other conditions <span className="font-normal text-ink-700/50">(optional — add as many as apply; sharpens the immune / adverse-event read)</span></label>
+              <div className="mt-2">
+                <ConditionPicker
+                  value={comorbid}
+                  onChange={setComorbid}
+                  impliedKey={impliedCondition((CATALOG.find((d) => d.key === disease) || DEFAULT_DISEASE).department)}
+                />
               </div>
             </div>
 

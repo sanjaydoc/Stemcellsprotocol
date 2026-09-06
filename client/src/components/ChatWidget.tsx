@@ -10,7 +10,8 @@ import { saveRow } from '../api/supabase';
 import { runPipeline, type PipelineResult } from '../sim/pipeline';
 import { buildRun, type FullRun } from '../sim/full';
 import { CATALOG, DEFAULT_DISEASE } from '../sim/catalog';
-import { COMORBIDITIES, impliedComorbidity } from '../sim/immune';
+import { impliedCondition } from '../sim/immune';
+import ConditionPicker from './ConditionPicker';
 import SimRun from './SimRun';
 
 interface Attachment {
@@ -708,29 +709,13 @@ export default function ChatWidget() {
                       Run ▶
                     </button>
                   </div>
-                  <p className="mt-2 mb-1 text-[11px] font-semibold text-ink-800">Other conditions <span className="font-normal text-ink-700/50">(optional)</span></p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {(() => {
-                      const dz = CATALOG.find((d) => d.key === simDisease) || DEFAULT_DISEASE;
-                      const implied = impliedComorbidity(dz.department);
-                      return COMORBIDITIES.map((c) => {
-                        const auto = c.key === implied;
-                        const on = simComorbid.includes(c.key) || auto;
-                        return (
-                          <button
-                            key={c.key}
-                            type="button"
-                            disabled={auto}
-                            title={auto ? 'Implied by the selected indication' : ''}
-                            onClick={() => setSimComorbid((cur) => cur.includes(c.key) ? cur.filter((x) => x !== c.key) : [...cur, c.key])}
-                            className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold transition ${on ? 'border-clay-500 bg-clay-500 text-white' : 'border-cream-300 bg-white text-ink-800 hover:border-clay-400'}`}
-                          >
-                            {on ? '✓ ' : '+ '}{c.label}{auto ? ' · indication' : ''}
-                          </button>
-                        );
-                      });
-                    })()}
-                  </div>
+                  <p className="mt-2 mb-1 text-[11px] font-semibold text-ink-800">Other conditions <span className="font-normal text-ink-700/50">(optional · add as many as apply)</span></p>
+                  <ConditionPicker
+                    compact
+                    value={simComorbid}
+                    onChange={setSimComorbid}
+                    impliedKey={impliedCondition((CATALOG.find((d) => d.key === simDisease) || DEFAULT_DISEASE).department)}
+                  />
                   <p className="mt-1.5 text-[10.5px] text-ink-700/55">8 auto steps · runs on your device · rest is automatic.</p>
                 </div>
               )}

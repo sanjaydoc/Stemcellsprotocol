@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import Icon from '../components/Icon';
 import SimHeaderBand from '../components/SimHeaderBand';
 import SimulatorChat from './SimulatorChat';
-import { COMORBIDITIES, impliedComorbidity } from '../sim/immune';
+import { impliedCondition } from '../sim/immune';
+import ConditionPicker from '../components/ConditionPicker';
 import {
   analyze,
   assembleConstruct,
@@ -346,9 +347,6 @@ export default function SimulatorLocal() {
     }
   };
 
-  const toggleComorbid = (key: string) =>
-    setComorbid((cur) => cur.includes(key) ? cur.filter((x) => x !== key) : [...cur, key]);
-
   const runDesign = async () => {
     setError('');
     setRanked(null);
@@ -652,22 +650,9 @@ export default function SimulatorLocal() {
           <input value={age} onChange={(e) => setAge(e.target.value)} inputMode="numeric" placeholder="e.g. 39" className="input mt-1" />
 
           {/* Other conditions — Step 8 immune / adverse-event modifiers */}
-          <label className="mt-3 block text-sm font-semibold text-ink-800">Other conditions <span className="font-normal text-ink-700/50">(optional)</span></label>
-          <div className="mt-1.5 flex flex-wrap gap-1.5">
-            {COMORBIDITIES.map((c) => {
-              const auto = c.key === impliedComorbidity(disease?.department);
-              const on = comorbid.includes(c.key) || auto;
-              return (
-                <button
-                  key={c.key} type="button" disabled={auto}
-                  title={auto ? 'Implied by the selected indication' : ''}
-                  onClick={() => toggleComorbid(c.key)}
-                  className={`rounded-full border px-2.5 py-1 text-xs font-semibold transition ${on ? 'border-clay-500 bg-clay-500 text-white' : 'border-cream-300 bg-white text-ink-800 hover:border-clay-400'}`}
-                >
-                  {on ? '✓ ' : '+ '}{c.label}{auto ? ' · indication' : ''}
-                </button>
-              );
-            })}
+          <label className="mt-3 block text-sm font-semibold text-ink-800">Other conditions <span className="font-normal text-ink-700/50">(optional · add as many as apply)</span></label>
+          <div className="mt-1.5">
+            <ConditionPicker value={comorbid} onChange={setComorbid} impliedKey={impliedCondition(disease?.department)} />
           </div>
 
           <button onClick={runAnalyze} disabled={!canAnalyze || !!busy}
