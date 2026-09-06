@@ -192,6 +192,35 @@ export function projectRejuvenation(dnamAge: number, coverage: number, tissueKey
   };
 }
 
+// ---- regeneration projection (cell-therapy modality — replaces age reversal) ----
+// MSC / exosome / HSC therapies don't reverse epigenetic age via OSK; their value
+// is TISSUE REPAIR. Each dose repairs a tissue-tuned fraction of the addressable
+// functional deficit, compounding with diminishing returns. Illustrative model.
+const TISSUE_REGEN: Record<string, number> = {
+  joint: 0.5, skin: 0.55, bone: 0.5, liver: 0.5, gut: 0.45, immune: 0.45, muscle: 0.45,
+  systemic: 0.42, kidney: 0.4, lung: 0.4, retina: 0.4, pancreas: 0.38, heart: 0.35, cns: 0.3,
+};
+export interface Regeneration {
+  doses: number; regeneration_index: number; per_first_dose: number;
+  efficiency: number; tissue_key: string; per_dose: { dose: number; repaired: number }[]; basis: string;
+}
+export function projectRegeneration(tissueKey: string | null | undefined, coverage: number, doses = 1): Regeneration {
+  const eff = TISSUE_REGEN[(tissueKey || '').toLowerCase()] ?? 0.42;
+  const n = Math.max(1, Math.min(Math.trunc(doses || 1), 10));
+  const per: { dose: number; repaired: number }[] = [];
+  let repaired = 0;
+  for (let i = 1; i <= n; i++) { repaired += eff * (1 - repaired); per.push({ dose: i, repaired: Math.round(repaired * 100 * coverage) }); }
+  return {
+    doses: n,
+    regeneration_index: Math.round(repaired * 100 * coverage),
+    per_first_dose: Math.round(eff * 100 * coverage),
+    efficiency: Math.round(eff * 100) / 100,
+    tissue_key: tissueKey || 'generic',
+    per_dose: per,
+    basis: `Illustrative tissue-repair model: each dose repairs ${Math.round(eff * 100)}% of the remaining addressable functional deficit in the target tissue (diminishing returns), scaled by CpG coverage. A planning estimate, not a measured outcome — confirm with follow-up imaging/function tests.`,
+  };
+}
+
 // ---- tumorigenicity safety envelope ---------------------------------------
 export interface TumorEnvelope {
   risk_tier: string; estimated_risk: number; risk_threshold: number; max_safe_cycles: number;

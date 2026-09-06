@@ -2,6 +2,8 @@
 // backend's disease → tissue/capsid mapping (app/catalog/diseases.py) so the
 // run picks the same reprogramming efficiency, delivery and proliferation class.
 
+export type Modality = 'reprogramming' | 'cell';
+
 export interface DiseaseEntry {
   key: string;
   disease: string;
@@ -10,7 +12,19 @@ export interface DiseaseEntry {
   tissue: string;       // human label
   capsid: string;       // AAV serotype
   route: string;        // delivery route
+  modality: Modality;   // 'reprogramming' (OSK / age-reversal) vs 'cell' (MSC/exosome therapy)
 }
+
+// Which therapies get the reprogramming treatment (age reversal + OSK construct +
+// "Reprogramming cycles" + tumorigenicity envelope) vs the cell-therapy treatment
+// (regeneration projection + IV exosome carrier + "Stem-cell therapy cycles", no
+// tumorigenicity step). Per the founder's spec: the Age-Rejuvenation department
+// therapies are the reprogramming set; everything else is cell therapy.
+export function modalityOf(department: string): Modality {
+  return department === 'Age Rejuvenation' ? 'reprogramming' : 'cell';
+}
+export const isReprogramming = (d: { modality?: Modality; department?: string } | null | undefined): boolean =>
+  (d?.modality ?? (d?.department ? modalityOf(d.department) : 'cell')) === 'reprogramming';
 
 // tissue_key → (tissue label, capsid, route) — from TISSUE_PRESETS.
 const PRESET: Record<string, { tissue: string; capsid: string; route: string }> = {
@@ -64,6 +78,7 @@ export const CATALOG: DiseaseEntry[] = RAW.map(([disease, department, tk]) => {
   return {
     key: disease.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''),
     disease, department, tissue_key: tk, tissue: p.tissue, capsid: p.capsid, route: p.route,
+    modality: modalityOf(department),
   };
 });
 

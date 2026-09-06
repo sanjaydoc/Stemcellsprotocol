@@ -96,11 +96,17 @@ export function exportSimPdf(p: any, filename = 'StemCells-Simulator-Report.pdf'
   if (hdr.length) kv(hdr);
 
   // ---- KPI tiles ----
-  const ea = p.epigenetic_age || {}; const rej = p.rejuvenation || {}; const tum = p.tumor || {};
+  const isReprog = (p.modality || 'reprogramming') === 'reprogramming';
+  const ea = p.epigenetic_age || {}; const rej = p.rejuvenation || {}; const regen = p.regeneration || {}; const tum = p.tumor || {};
   const cards: { value: string; label: string; color: RGB }[] = [];
   if (ea.dnam_age != null) cards.push({ value: `${ea.dnam_age}`, label: 'DNAm age (yrs)', color: PRIMARY });
-  if (rej.years_reversed != null) cards.push({ value: `-${rej.years_reversed}`, label: 'years reversed', color: GREEN });
-  if (rej.tissue_rejuvenation_index != null) cards.push({ value: `${rej.tissue_rejuvenation_index}%`, label: 'rejuvenation index', color: TEAL });
+  if (isReprog) {
+    if (rej.years_reversed != null) cards.push({ value: `-${rej.years_reversed}`, label: 'years reversed', color: GREEN });
+    if (rej.tissue_rejuvenation_index != null) cards.push({ value: `${rej.tissue_rejuvenation_index}%`, label: 'rejuvenation index', color: TEAL });
+  } else if (regen.regeneration_index != null) {
+    cards.push({ value: `${regen.regeneration_index}%`, label: 'regeneration index', color: GREEN });
+    cards.push({ value: `${regen.doses}`, label: 'therapy doses', color: TEAL });
+  }
   if (tum.risk_tier) cards.push({ value: tum.risk_tier, label: 'tumorigenicity tier', color: tierColor(tum.risk_tier) });
   if (cards.length) {
     need(58); const gap = 8; const cwid = (CW - gap * (cards.length - 1)) / cards.length;
@@ -135,8 +141,8 @@ export function exportSimPdf(p: any, filename = 'StemCells-Simulator-Report.pdf'
     ]);
   }
 
-  // ---- §2 reprogramming projection ----
-  if (rej.projected_age != null) {
+  // ---- §2 reprogramming projection (reprogramming modality only) ----
+  if (isReprog && rej.projected_age != null) {
     section('2', 'Reprogramming projection', GREEN);
     need(30);
     const x0 = M + 2, x1 = M + CW - 6; const scale = (age: number) => x0 + (x1 - x0) * Math.min(100, Math.max(0, age)) / 100;
@@ -149,6 +155,30 @@ export function exportSimPdf(p: any, filename = 'StemCells-Simulator-Report.pdf'
     fill(GREEN); doc.roundedRect(M + CW - 104, y - 4, 104, 15, 7, 7, 'F'); txt(WHITE); doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5); doc.text(`-${rej.years_reversed} yr younger`, M + CW - 52, y + 6, { align: 'center' });
     y += 34;
     kv([['Cycles', String(rej.cycles)], ['Projected DNAm age (yrs)', String(rej.projected_age)], ['Years reversed', String(rej.years_reversed)], ['Tissue rejuvenation index', `${rej.tissue_rejuvenation_index}%`]], GREEN);
+  }
+
+  // ---- §2 regeneration projection (cell modality only) ----
+  if (!isReprog && regen.regeneration_index != null) {
+    section('2', 'Regeneration projection', GREEN);
+    need(30);
+    const x0 = M + 2; const tw = CW - 4;
+    fill(BGSOFT); doc.roundedRect(x0, y + 6, tw, 10, 5, 5, 'F');
+    fill(GREEN); doc.roundedRect(x0, y + 6, Math.max(6, tw * Math.min(1, regen.regeneration_index / 100)), 10, 5, 5, 'F');
+    txt(GREEN); doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5); doc.text(`tissue-repair index ${regen.regeneration_index}%`, x0, y + 2);
+    y += 24;
+    // per-dose bars
+    const curve = regen.per_dose || [];
+    if (curve.length) {
+      need(60); const chartH = 44, baseY = y + chartH; const slot = (CW - 10) / curve.length;
+      curve.forEach((d: any, i: number) => {
+        const bx = M + i * slot + slot / 2 - 7; const hh = chartH * (d.repaired / 100);
+        fill(d.dose === regen.doses ? GREEN : tint(GREEN, 0.4)); doc.rect(bx, baseY - hh, 14, hh, 'F');
+        txt(SUB); doc.setFont('helvetica', 'normal'); doc.setFontSize(6.5); doc.text(`${d.repaired}%`, bx + 7, baseY - hh - 2, { align: 'center' }); doc.text(String(d.dose), bx + 7, baseY + 8, { align: 'center' });
+      });
+      y = baseY + 16;
+    }
+    kv([['Therapy doses', String(regen.doses)], ['Tissue-repair index', `${regen.regeneration_index}%`], ['Target tissue', String(p.disease?.tissue || regen.tissue_key)]], GREEN);
+    if (regen.basis) { need(20); txt(SUB); doc.setFont('helvetica', 'italic'); doc.setFontSize(7.5); doc.text(doc.splitTextToSize(regen.basis, CW), M, y); y += 20; }
   }
 
   // ---- §3 top CpGs ----
@@ -204,6 +234,20 @@ export function exportSimPdf(p: any, filename = 'StemCells-Simulator-Report.pdf'
     });
     txt(SUB); doc.setFont('helvetica', 'normal'); doc.setFontSize(7);
     doc.text('■ promoter   ■ CDS (OSK/rtTA)   ■ 2A peptide   ■ polyA   ■ Kozak   ■ ITR', M, y + 4); y += 14;
+  }
+
+  // ---- §4 IV exosome carrier (cell modality) ----
+  const exo = p.exosome;
+  if (!isReprog && exo) {
+    section('4', 'IV exosome carrier (delivery)', TEAL);
+    kv([
+      ['Carrier', `${exo.strategy} · ${exo.vesicle_size_nm} nm`],
+      ['Route', exo.route],
+      ['Cargo', exo.cargo],
+      ['Targeting', `${exo.targeting.tissue} — ${exo.targeting.ligand}`],
+      ['Source', exo.source_cell],
+    ], TEAL);
+    if (exo.advantages?.length) { need(20); txt(SUB); doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.text(doc.splitTextToSize('Advantages: ' + exo.advantages.join('; '), CW), M, y + 4); y += 22; }
   }
 
   // ---- §6 safety avatar ----

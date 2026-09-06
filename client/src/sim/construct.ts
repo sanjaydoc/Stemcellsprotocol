@@ -80,6 +80,55 @@ export function assembleOSK(opts: { capsid?: string; tissueKey?: string | null }
   return { strategy, capsid, capsid_desc: capsidDescription(capsid, opts.tissueKey), vectors, notes };
 }
 
+// ---- IV exosome carrier (cell-therapy modality — replaces the OSK AAV) ------
+// MSC / exosome therapies deliver regenerative cargo in extracellular vesicles,
+// not an OSK gene cassette — so there is no AAV packaging limit and no dual-vector
+// split. Illustrative research delivery spec (no dose, no clinical claim).
+const EXO_TARGETING: Record<string, { ligand: string; note: string; local?: boolean }> = {
+  cns: { ligand: 'RVG peptide (Lamp2b)', note: 'RVG-displaying exosomes cross the blood–brain barrier after IV dosing.' },
+  systemic: { ligand: 'Native circulation + CD47 “don’t-eat-me” display', note: 'CD47 extends circulation time for systemic targets.' },
+  immune: { ligand: 'Native uptake by PBMCs / spleen', note: 'Immune cells take up circulating exosomes readily.' },
+  joint: { ligand: 'Chondrocyte-affinity peptide', note: 'Intra-articular injection localises the vesicles to the joint.', local: true },
+  liver: { ligand: 'Native hepatic tropism', note: 'IV exosomes are naturally cleared to the liver.' },
+  lung: { ligand: 'First-pass lung capture (or nebulised)', note: 'IV exosomes show significant lung uptake.' },
+  heart: { ligand: 'Cardiac-homing peptide (CHP)', note: 'CHP-engineered exosomes enrich in myocardium.' },
+  skin: { ligand: 'Local injection', note: 'Local delivery for dermal/cosmetic targets.', local: true },
+  pancreas: { ligand: 'GLP-1 / islet-homing peptide', note: 'Islet-targeting ligands under study.' },
+  gut: { ligand: 'Oral / local or IV', note: 'Gut delivery often uses oral or local routes.' },
+  bone: { ligand: 'Aspartate-rich bone-targeting peptide', note: 'Aspartate peptides home to bone.', local: true },
+  kidney: { ligand: 'Native + megalin-affinity peptide', note: 'IV exosomes reach the kidney; peptide ligands improve tubular uptake.' },
+  retina: { ligand: 'Intravitreal-tropic peptide', note: 'Local (intravitreal) delivery preferred — IV homing is limited.', local: true },
+  muscle: { ligand: 'Muscle-homing peptide', note: 'Intramuscular or IV with muscle-targeting ligand.' },
+};
+
+export interface Exosome {
+  carrier: 'exosome'; strategy: string; payload: string; route: string; vesicle_size_nm: string;
+  source_cell: string; cargo: string; targeting: { tissue: string; ligand: string; note: string };
+  advantages: string[]; control: string;
+}
+
+export function assembleExosome(opts: { tissueKey?: string | null; tissueLabel?: string } = {}): Exosome {
+  const tk = (opts.tissueKey || 'systemic').toLowerCase();
+  const tgt = EXO_TARGETING[tk] || EXO_TARGETING.systemic;
+  return {
+    carrier: 'exosome',
+    strategy: 'IV exosome (extracellular vesicle) carrier',
+    payload: 'MSC-derived regenerative cargo',
+    route: tgt.local ? 'Local injection' : 'Intravenous infusion',
+    vesicle_size_nm: '30–150',
+    source_cell: 'Autologous / allogeneic MSC producer cells (vesicles harvested by ultracentrifugation / TFF)',
+    cargo: 'Regenerative miRNA (e.g. miR-21/-125), growth factors (VEGF, HGF, TGF-β) and mRNA — pro-repair, anti-inflammatory, pro-angiogenic.',
+    targeting: { tissue: opts.tissueLabel || tk, ligand: tgt.ligand, note: tgt.note },
+    advantages: [
+      'Low immunogenicity — vesicles can be made from the patient’s own cells.',
+      'Surface-engineerable — display a homing ligand for tissue targeting.',
+      'Re-dosable — no AAV neutralising-antibody problem on repeat IV dosing.',
+      'Cell-free — none of the embolic / ectopic-engraftment risk of whole-cell infusions.',
+    ],
+    control: 'Dose = number of vesicles × cargo copy number; repeat spaced infusions rather than a genetic switch.',
+  };
+}
+
 // ---- Step 6: Safety Implant Blob (avatar pre-screen) ----------------------
 const SAFETY_PER_CYCLE: Record<string, number> = { reprogramming: 0.07, gene_replacement: 0.03, epigenetic_silencing: 0.03 };
 const HOST_LABEL: Record<string, string> = { mouse: 'immunodeficient / transgenic mouse (NSG-style)', guinea_pig: 'transgenic guinea pig' };
