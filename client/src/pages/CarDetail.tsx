@@ -8,6 +8,7 @@ import StarRating from '../components/StarRating';
 import Spinner from '../components/Spinner';
 import Icon from '../components/Icon';
 import { gbp, statusLabel, isResearch } from '../utils/format';
+import { byTherapy } from '../protocols/registry';
 import { useSaved } from '../context/SavedContext';
 import { useAuth } from '../context/AuthContext';
 
@@ -382,6 +383,18 @@ export default function CarDetail() {
             <Link to="/consultation" className="btn-primary mt-4 block w-full py-3.5 text-center">
               Book a consultation
             </Link>
+            {(() => {
+              const proto = byTherapy(car.make, car.model);
+              return proto ? (
+                <Link
+                  to={`/protocols/${proto.code}`}
+                  className="btn-outline mt-2 flex w-full items-center justify-center gap-2 py-3.5"
+                >
+                  <Icon name="clipboard" className="h-5 w-5" />
+                  Administration protocol · {proto.code}
+                </Link>
+              ) : null;
+            })()}
             <button onClick={onSave} className="btn-outline mt-2 w-full py-3.5">
               <svg
                 viewBox="0 0 24 24"
