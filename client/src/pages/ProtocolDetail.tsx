@@ -2,6 +2,7 @@ import { Link, useParams } from 'react-router-dom';
 import Icon, { type IconName } from '../components/Icon';
 import { CATEGORIES, byCode, type Protocol } from '../protocols/registry';
 import { COMMON_PRECHECKS, DISCLAIMER } from '../protocols/standards';
+import { exportSopPdf } from '../protocols/sopPdf';
 
 export default function ProtocolDetail() {
   const { code = '' } = useParams();
@@ -34,6 +35,13 @@ export default function ProtocolDetail() {
           <h1 className="mt-3 font-display text-3xl font-extrabold text-white sm:text-4xl">{p.name}</h1>
           {p.aka && <p className="mt-1 text-white/50">{p.aka}</p>}
           <p className="mt-3 max-w-2xl text-white/70">{p.indication}</p>
+          <button
+            type="button"
+            onClick={() => exportSopPdf(p)}
+            className="mt-4 inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-bold text-ink-900 transition hover:bg-white/90"
+          >
+            <Icon name="clipboard" className="h-4 w-4" /> Download SOP (PDF)
+          </button>
         </div>
       </section>
 
