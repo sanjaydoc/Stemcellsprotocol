@@ -24,6 +24,8 @@ import About from './pages/About';
 import Mission from './pages/Mission';
 import Specialists from './pages/Specialists';
 import Safety from './pages/Safety';
+import Protocols from './pages/Protocols';
+import ProtocolDetail from './pages/ProtocolDetail';
 import WaitingList from './pages/WaitingList';
 import NotFound from './pages/NotFound';
 
@@ -78,6 +80,8 @@ export default function App() {
           <Route path="/mission" element={<Mission />} />
           <Route path="/specialists" element={<Specialists />} />
           <Route path="/safety" element={<Safety />} />
+          <Route path="/protocols" element={<Protocols />} />
+          <Route path="/protocols/:code" element={<ProtocolDetail />} />
           <Route path="/waiting-list" element={<WaitingList />} />
           <Route path="*" element={<NotFound />} />
         </Routes>

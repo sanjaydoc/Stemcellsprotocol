@@ -11,6 +11,7 @@ const linkCols = [
     { label: 'Contact us', to: '/investors' },
   ],
   [
+    { label: 'Protocol standard', to: '/protocols' },
     { label: 'Safety & accreditation', to: '/safety' },
     { label: 'Care packages', to: '/care' },
     { label: 'Browse therapies', to: '/browse' },

@@ -48,6 +48,7 @@ const menuSections: MenuSection[] = [
     ],
   },
   { title: 'Our mission', to: '/mission' },
+  { title: 'Protocol standard', to: '/protocols' },
   { title: 'Protocol Simulator', to: '/simulator' },
   { title: 'Clinical trials & research', to: '/research' },
   { title: 'Care packages & financing', to: '/care' },
