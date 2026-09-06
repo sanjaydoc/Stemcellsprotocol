@@ -39,12 +39,15 @@ _TARGETING = {
 
 _SOURCE_CELLS = {
     "osk": "HEK293T or autologous MSC producer cells (transfected to secrete OSK-mRNA-loaded exosomes)",
+    "regenerative": "Autologous / allogeneic MSC producer cells (vesicles harvested by ultracentrifugation / TFF)",
     "molecule": "Autologous/allogeneic MSC-derived exosomes (drug loaded after purification)",
 }
 
 _LOADING = {
     "osk": "Endogenous loading — producer cells express OCT4/SOX2/KLF4 mRNA (+ an RNA-packaging tag) "
            "so nascent exosomes encapsulate the transcripts; harvested by ultracentrifugation / TFF.",
+    "regenerative": "Endogenous loading — MSC producer cells naturally secrete regenerative miRNA / "
+                    "growth-factor cargo into exosomes; harvested by ultracentrifugation / TFF.",
     "molecule": "Exogenous loading — small molecule loaded into purified exosomes by sonication / "
                 "electroporation / incubation, then re-purified.",
 }
@@ -52,19 +55,23 @@ _LOADING = {
 
 def design_exosome_delivery(
     *,
-    payload: str = "osk",           # 'osk' (reprogramming) | 'molecule'
+    payload: str = "osk",           # 'osk' (reprogramming) | 'regenerative' (MSC) | 'molecule'
     tissue_key: str = "systemic",
     tissue_label: str = "",
     molecule_smiles: str | None = None,
 ) -> dict:
     tgt = _TARGETING.get(tissue_key, _TARGETING["systemic"])
     is_osk = payload == "osk"
+    is_regen = payload == "regenerative"
 
     cargo = (
         "Tri-cistronic OSK mRNA — OCT4 + SOX2 + KLF4 as a single 2A-linked transcript "
         "(transient, non-integrating; expression decays as mRNA is degraded → intrinsically "
         "'partial/pulsed' reprogramming)."
         if is_osk else
+        "MSC-derived regenerative cargo — pro-repair miRNA (e.g. miR-21/-125), growth factors "
+        "(VEGF, HGF, TGF-β) and mRNA; anti-inflammatory and pro-angiogenic."
+        if is_regen else
         f"Small molecule{f' ({molecule_smiles})' if molecule_smiles else ''} loaded into the exosome lumen."
     )
 
@@ -73,6 +80,10 @@ def design_exosome_delivery(
         "Surface-engineerable — display a homing ligand for tissue targeting.",
         "Re-dosable — unlike AAV, no neutralising-antibody problem on repeat IV dosing.",
     ]
+    if is_regen:
+        advantages.append(
+            "Cell-free — none of the embolic / ectopic-engraftment risk of whole-cell MSC infusions.",
+        )
     if is_osk:
         advantages.insert(
             0,
@@ -84,14 +95,16 @@ def design_exosome_delivery(
             "brief 'dox-on' pulse used for safe partial reprogramming.",
         )
 
+    pk = "osk" if is_osk else "regenerative" if is_regen else "molecule"
     spec = {
         "carrier": "IV exosome (extracellular vesicle)",
-        "payload": "OSK reprogramming (mRNA)" if is_osk else "novel small molecule",
+        "strategy": "IV exosome (extracellular vesicle) carrier",
+        "payload": "OSK reprogramming (mRNA)" if is_osk else "MSC regenerative cargo" if is_regen else "novel small molecule",
         "route": "Intravenous infusion" if tissue_key not in ("retina", "joint", "skin") else "Local injection",
         "vesicle_size_nm": "30–150",
-        "source_cell": _SOURCE_CELLS["osk" if is_osk else "molecule"],
+        "source_cell": _SOURCE_CELLS[pk],
         "cargo": cargo,
-        "loading_method": _LOADING["osk" if is_osk else "molecule"],
+        "loading_method": _LOADING[pk],
         "targeting": {
             "tissue": tissue_label or tissue_key,
             "ligand": tgt["ligand"],

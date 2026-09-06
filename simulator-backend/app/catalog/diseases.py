@@ -240,6 +240,19 @@ _THERAPIES: list[tuple[str, str, str, str, str]] = [
 ]
 
 
+def _modality_of(department: str, model: str = "") -> str:
+    """reprogramming (age reversal + OSK + reprogramming cycles + tumorigenicity) vs
+    cell therapy (regeneration + IV exosome + stem-cell cycles). The Age-Rejuvenation
+    department is the reprogramming set; the Persona Reversal therapies stay
+    reprogramming even outside that department."""
+    import re
+    if department == "Age Rejuvenation":
+        return "reprogramming"
+    if re.search(r"persona reversal|epigenetic reprogramming", model or "", re.I):
+        return "reprogramming"
+    return "cell"
+
+
 def _slug(dept: str, model: str) -> str:
     import re
     s = f"{dept}-{model}".lower()
@@ -266,6 +279,7 @@ def disease_catalog() -> dict:
             "route": route,
             "status": status,
             "default_approach": mapping.get("approach", "both"),
+            "modality": _modality_of(dept, model),
             "tissue_key": tissue_key,
             "tissue": preset["tissue"],
             "capsid": ("aavrh74" if mapping.get("construct") in ("gene_replacement", "epigenetic_silencing")

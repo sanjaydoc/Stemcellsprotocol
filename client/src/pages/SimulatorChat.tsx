@@ -5,9 +5,11 @@ import {
   assembleConstruct,
   datasetSamples,
   deliverExosome,
+  exosomeCarrier,
   engines,
   getCatalog,
   listSamples,
+  modalityOf,
   reportPdf,
   startDatasetDownload,
   startDesign,
@@ -62,6 +64,7 @@ export default function SimulatorChat({ onExit }: { onExit?: () => void }) {
     () => catalog?.diseases.find((d) => d.key === diseaseKey) ?? null,
     [catalog, diseaseKey],
   );
+  const isReprog = useMemo(() => modalityOf(disease) === 'reprogramming', [disease]);
 
   useEffect(() => {
     getCatalog().then(setCatalog).catch(() => setError('Backend not reachable.'));
@@ -106,9 +109,12 @@ export default function SimulatorChat({ onExit }: { onExit?: () => void }) {
       setDatasetLabel(d.dataset.label);
       datasetSamples(d.dataset.label).then(setSamples).catch(() => {});
     }
+    const dReprog = modalityOf(d) === 'reprogramming';
     say('assistant', (
       <div>
-        <p><b>{d.disease}</b> — {d.department}. For an Persona Reversal reprogramming construct I’d target <b>{d.tissue}</b> (capsid {d.capsid.toUpperCase()}).</p>
+        <p><b>{d.disease}</b> — {d.department}. {dReprog
+          ? <>For a Persona Reversal reprogramming construct I’d target <b>{d.tissue}</b> (capsid {d.capsid.toUpperCase()}).</>
+          : <>This is a <b>regenerative cell therapy</b> — I’d deliver regenerative cargo to <b>{d.tissue}</b> via an IV exosome carrier (no age-reversal / OSK).</>}</p>
         {d.dataset && !d.dataset.proxy
           ? <p className="mt-1">A curated methylation dataset is available (<b>{d.dataset.accession}</b>, {d.dataset.tissue}). Download it, or upload your own file.</p>
           : <p className="mt-1">No disease-specific cohort yet — a generic blood-methylation baseline (<b>{d.dataset?.accession}</b>) is available, or upload your own file.</p>}
@@ -162,10 +168,16 @@ export default function SimulatorChat({ onExit }: { onExit?: () => void }) {
           <p>Biological age (Horvath clock): <b className="text-clay-700">{ea.dnam_age} yr</b>
             {ea.age_acceleration != null && <> · acceleration <b>{ea.age_acceleration > 0 ? '+' : ''}{ea.age_acceleration} yr</b></>}
             {' '}· coverage {Math.round(ea.coverage * 100)}% ({ea.n_used}/{ea.n_total} CpGs).</p>
-          {res.rejuvenation && (
+          {isReprog && res.rejuvenation && (
             <p className="mt-1 text-ink-700/70">
               Reprogramming projection: <b className="text-clay-700">−{res.rejuvenation.years_reversed} yr</b> reversed →
               projected DNAm age <b>{res.rejuvenation.projected_age} yr</b> · tissue rejuvenation {res.rejuvenation.tissue_rejuvenation_index}%
+              <span className="text-ink-700/50"> (projected, not measured)</span>.
+            </p>
+          )}
+          {!isReprog && res.regeneration && (
+            <p className="mt-1 text-ink-700/70">
+              Regeneration projection: tissue-repair index <b className="text-clay-700">{res.regeneration.regeneration_index}%</b> for {disease?.tissue}
               <span className="text-ink-700/50"> (projected, not measured)</span>.
             </p>
           )}
@@ -227,6 +239,20 @@ export default function SimulatorChat({ onExit }: { onExit?: () => void }) {
     finally { setBusy(''); }
   };
 
+  // --- cell modality: build the regenerative IV exosome carrier directly --
+  const buildRegenerative = async () => {
+    say('user', <span>Regenerative cell therapy (IV exosome).</span>);
+    setError(''); setBusy('Designing IV exosome carrier…');
+    try {
+      const spec = await exosomeCarrier({ tissue_key: disease?.tissue_key, tissue_label: disease?.tissue });
+      setConstruct({ exosome: spec, carrier: 'exosome' });
+      say('assistant', exosomeBubble(spec));
+      say('assistant', <p className="mt-1">That’s a complete regenerative cell-therapy protocol for <b>{disease?.disease}</b> — delivery by IV exosome (no OSK / age-reversal). Export it, or start another.</p>);
+      setStage('done');
+    } catch (e: any) { setError(e.message || 'Carrier design failed'); }
+    finally { setBusy(''); }
+  };
+
   // --- Track B generate + carrier ----------------------------------------
   const runDesign = async () => {
     setError(''); setBusy('Generating candidate molecules…');
@@ -281,8 +307,13 @@ export default function SimulatorChat({ onExit }: { onExit?: () => void }) {
 
   const exportReport = () => reportPdf({
     disease: disease ? { name: disease.disease, department: disease.department, tissue: disease.tissue, capsid: disease.capsid } : undefined,
+    modality: isReprog ? 'reprogramming' : 'cell',
     epigenetic_age: analysis?.epigenetic_age, targets: analysis?.targets,
-    construct, candidates: ranked?.candidates,
+    rejuvenation: isReprog ? analysis?.rejuvenation : undefined,
+    regeneration: !isReprog ? analysis?.regeneration : undefined,
+    construct: isReprog ? construct : undefined,
+    exosome: !isReprog ? (construct?.exosome || construct) : undefined,
+    candidates: ranked?.candidates,
   });
 
   return (
@@ -376,7 +407,9 @@ export default function SimulatorChat({ onExit }: { onExit?: () => void }) {
 
           {stage === 'approach' && (
             <div className="flex flex-wrap gap-2">
-              <button onClick={() => chooseApproach('er100')} className="btn-primary px-4 py-2.5 text-sm">🧬 Persona Reversal reprogramming (OSK)</button>
+              {isReprog
+                ? <button onClick={() => chooseApproach('er100')} className="btn-primary px-4 py-2.5 text-sm">🧬 Persona Reversal reprogramming (OSK)</button>
+                : <button onClick={buildRegenerative} disabled={!!busy} className="btn-primary px-4 py-2.5 text-sm disabled:opacity-50">🧬 Regenerative cell therapy (IV exosome)</button>}
               <button onClick={() => chooseApproach('molecule')} className="btn-outline px-4 py-2.5 text-sm">⚗️ Design a novel molecule</button>
             </div>
           )}

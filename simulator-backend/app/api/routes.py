@@ -127,6 +127,39 @@ def _project_rejuvenation(dnam_age: float, coverage: float, tissue_key: str | No
     }
 
 
+# Per-tissue regeneration (tissue-repair) responsiveness for cell/MSC therapies —
+# mirrors client/src/sim/pipeline.ts TISSUE_REGEN.
+TISSUE_REGEN = {
+    "joint": 0.5, "skin": 0.55, "bone": 0.5, "liver": 0.5, "gut": 0.45, "immune": 0.45,
+    "muscle": 0.45, "systemic": 0.42, "kidney": 0.4, "lung": 0.4, "retina": 0.4,
+    "pancreas": 0.38, "heart": 0.35, "cns": 0.3,
+}
+
+
+def _project_regeneration(tissue_key: str | None, coverage: float, doses: int = 1) -> dict:
+    """Illustrative tissue-repair projection for cell / MSC therapies (replaces the
+    reprogramming/age-reversal projection). Each dose repairs a tissue-tuned fraction
+    of the remaining addressable functional deficit — diminishing returns."""
+    eff = TISSUE_REGEN.get((tissue_key or "").lower(), 0.42)
+    n = max(1, min(int(doses or 1), 10))
+    per = []
+    repaired = 0.0
+    for i in range(1, n + 1):
+        repaired += eff * (1 - repaired)
+        per.append({"dose": i, "repaired": round(repaired * 100 * coverage)})
+    return {
+        "doses": n,
+        "regeneration_index": round(repaired * 100 * coverage),
+        "per_first_dose": round(eff * 100 * coverage),
+        "efficiency": round(eff, 2),
+        "tissue_key": tissue_key or "generic",
+        "per_dose": per,
+        "basis": f"Illustrative tissue-repair model: each dose repairs {int(eff * 100)}% of the "
+        "remaining addressable functional deficit in the target tissue (diminishing returns), "
+        "scaled by CpG coverage. A planning estimate, not a measured outcome.",
+    }
+
+
 def _dataset_age(label: str, sample: str | None) -> float | None:
     """Look up a sample's chronological age from the prepped ages_<label>.csv."""
     import csv as _csv
@@ -216,6 +249,7 @@ async def analyze(
     out: dict = {
         "epigenetic_age": result.public(),
         "rejuvenation": _project_rejuvenation(result.dnam_age, result.coverage, tissue_key, cycles),
+        "regeneration": _project_regeneration(tissue_key, result.coverage, cycles),
         "methylation": {"sample": meth.sample, "n_sites": meth.n_sites},
         "targets": [t.public() for t in targets],
         "objectives": design_objectives(targets),
@@ -707,6 +741,27 @@ async def immune_safety_route(spec: dict = Body(default={})) -> dict:
 async def comorbidities() -> dict:
     """The comorbidity options + labels the Step 8 multi-select offers."""
     return {"comorbidities": COMORBIDITIES}
+
+
+@router.post("/regeneration")
+async def regeneration(spec: dict = Body(default={})) -> dict:
+    """Tissue-repair projection for cell / MSC therapies (replaces age reversal)."""
+    try:
+        coverage = float(spec.get("coverage", 1.0))
+    except (TypeError, ValueError):
+        coverage = 1.0
+    return _project_regeneration(spec.get("tissue_key"), coverage, int(spec.get("doses") or spec.get("cycles") or 1))
+
+
+@router.post("/exosome_carrier")
+async def exosome_carrier(spec: dict = Body(default={})) -> dict:
+    """IV exosome carrier for a regenerative (MSC) cell therapy — the cell-modality
+    analogue of the OSK AAV construct."""
+    return design_exosome_delivery(
+        payload="regenerative",
+        tissue_key=spec.get("tissue_key", "systemic"),
+        tissue_label=spec.get("tissue_label", ""),
+    )
 
 
 @router.post("/deliver/exosome")

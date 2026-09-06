@@ -551,8 +551,10 @@ def build_pdf(payload: dict) -> bytes:
         return t
 
     # ---- Header --------------------------------------------------------
+    _is_reprog_hdr = (payload.get("modality") or "reprogramming") == "reprogramming"
     story += [HeaderBand("StemCells Protocol — Simulator Report",
-                         "Personalised epigenetic reprogramming & safety envelope"),
+                         "Personalised epigenetic reprogramming & safety envelope" if _is_reprog_hdr
+                         else "Personalised regenerative cell therapy & safety envelope"),
               Spacer(1, 10)]
 
     # ---- Patient / therapy card ---------------------------------------
@@ -575,16 +577,22 @@ def build_pdf(payload: dict) -> bytes:
         story += [kv_table(hdr_rows), Spacer(1, 10)]
 
     # ---- Headline KPI cards -------------------------------------------
+    is_reprog = (payload.get("modality") or "reprogramming") == "reprogramming"
     ea = payload.get("epigenetic_age") or {}
     rej = payload.get("rejuvenation") or {}
+    regen = payload.get("regeneration") or {}
     tum = payload.get("tumor") or {}
     kpis = []
     if ea.get("dnam_age") is not None:
         kpis.append({"value": f"{ea.get('dnam_age')}", "label": "DNAm age (yrs)", "color": PRIMARY})
-    if rej.get("years_reversed") is not None:
-        kpis.append({"value": f"−{rej.get('years_reversed')}", "label": "years reversed", "color": GREEN})
-    if rej.get("tissue_rejuvenation_index") is not None:
-        kpis.append({"value": f"{rej.get('tissue_rejuvenation_index')}%", "label": "rejuvenation index", "color": TEAL})
+    if is_reprog:
+        if rej.get("years_reversed") is not None:
+            kpis.append({"value": f"−{rej.get('years_reversed')}", "label": "years reversed", "color": GREEN})
+        if rej.get("tissue_rejuvenation_index") is not None:
+            kpis.append({"value": f"{rej.get('tissue_rejuvenation_index')}%", "label": "rejuvenation index", "color": TEAL})
+    elif regen.get("regeneration_index") is not None:
+        kpis.append({"value": f"{regen.get('regeneration_index')}%", "label": "regeneration index", "color": GREEN})
+        kpis.append({"value": f"{regen.get('doses')}", "label": "therapy doses", "color": TEAL})
     if tum.get("risk_tier"):
         kpis.append({"value": tum.get("risk_tier"), "label": "tumorigenicity tier",
                      "color": _tier_color(tum.get("risk_tier"))})
@@ -608,8 +616,8 @@ def build_pdf(payload: dict) -> bytes:
                  ])]
         story += [KeepTogether(block), Spacer(1, 10)]
 
-    # ---- 2 · Reprogramming projection ---------------------------------
-    if rej and rej.get("projected_age") is not None:
+    # ---- 2 · Reprogramming projection (reprogramming modality) --------
+    if is_reprog and rej and rej.get("projected_age") is not None:
         block = [SectionHeader("2", "Reprogramming projection", GREEN), Spacer(1, 4),
                  ReversalTrack(ea.get("dnam_age") or rej.get("projected_age"),
                                rej.get("projected_age"), rej.get("years_reversed"),
@@ -622,6 +630,16 @@ def build_pdf(payload: dict) -> bytes:
         if rej.get("basis"):
             block.append(Spacer(1, 3))
             block.append(Paragraph(f"<b>Basis.</b> {rej.get('basis')}", small))
+        story += [KeepTogether(block), Spacer(1, 10)]
+
+    # ---- 2 · Regeneration projection (cell modality) -----------------
+    if not is_reprog and regen and regen.get("regeneration_index") is not None:
+        rows = [["Therapy doses", regen.get("doses")],
+                ["Tissue-repair index", f"{regen.get('regeneration_index')}%"],
+                ["Target tissue", (payload.get('disease') or {}).get('tissue', regen.get('tissue_key'))]]
+        block = [SectionHeader("2", "Regeneration projection", GREEN), Spacer(1, 4), kv_table(rows, GREEN)]
+        if regen.get("basis"):
+            block += [Spacer(1, 3), Paragraph(f"<b>Basis.</b> {regen.get('basis')}", small)]
         story += [KeepTogether(block), Spacer(1, 10)]
 
     # ---- 3 · Top target CpGs ------------------------------------------
@@ -652,9 +670,25 @@ def build_pdf(payload: dict) -> bytes:
         tt.setStyle(TableStyle(style))
         story += [SectionHeader("3", "Top target CpGs"), Spacer(1, 4), tt, Spacer(1, 10)]
 
-    # ---- 4 · OSK Tet-On construct -------------------------------------
+    # ---- 4 · IV exosome carrier (cell modality) ----------------------
+    exo = payload.get("exosome") or {}
+    if not is_reprog and exo:
+        tgt = exo.get("targeting") or {}
+        block = [SectionHeader("4", "IV exosome carrier (delivery)", TEAL), Spacer(1, 4),
+                 kv_table([
+                     ["Carrier", f"{exo.get('strategy') or exo.get('carrier')} · {exo.get('vesicle_size_nm')} nm"],
+                     ["Route", exo.get("route")],
+                     ["Cargo", exo.get("cargo")],
+                     ["Targeting", f"{tgt.get('tissue')} — {tgt.get('ligand')}"],
+                     ["Source", exo.get("source_cell")],
+                 ], TEAL)]
+        if exo.get("advantages"):
+            block += [Spacer(1, 3), Paragraph("<b>Advantages:</b> " + "; ".join(exo["advantages"]), small)]
+        story += [KeepTogether(block), Spacer(1, 10)]
+
+    # ---- 4 · OSK Tet-On construct (reprogramming modality) -----------
     con = payload.get("construct") or {}
-    if con:
+    if is_reprog and con:
         block = [SectionHeader("4", "OSK Tet-On construct (Track A)"), Spacer(1, 3),
                  Paragraph(f"Strategy: <b>{con.get('strategy')}</b> &nbsp;·&nbsp; "
                            f"Capsid: {con.get('capsid_desc')}", body), Spacer(1, 4)]
@@ -779,7 +813,13 @@ def build_pdf(payload: dict) -> bytes:
                   Paragraph(interp, body), Spacer(1, 8)]
 
     # ---- Footer disclaimer band ---------------------------------------
-    disc = Table([[Paragraph(_DISCLAIMER, small)]], colWidths=[CONTENT_W])
+    _disc_text = _DISCLAIMER if is_reprog else (
+        "Epigenetic age is computed from your data with the published Horvath (2013) clock. The "
+        "regeneration projection and exosome carrier are illustrative research designs, not measured "
+        "outcomes; the immune / adverse-event read is a relative, probabilistic estimate — not a "
+        "diagnosis or a yes/no prediction. Not medical advice."
+    )
+    disc = Table([[Paragraph(_disc_text, small)]], colWidths=[CONTENT_W])
     disc.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, -1), _tint(PRIMARY, 0.07)),
         ("BOX", (0, 0), (-1, -1), 0.5, _tint(PRIMARY, 0.4)),

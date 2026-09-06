@@ -44,6 +44,7 @@ export interface DiseaseEntry {
   capsid: string;
   construct_route: string;
   construct_type?: string;   // 'reprogramming' (OSK) | 'gene_replacement' (micro-dystrophin)
+  modality?: 'reprogramming' | 'cell';   // reprogramming (OSK/age-reversal) vs cell (MSC/exosome)
   dataset_ready: boolean;
   dataset: null | {
     accession: string;
@@ -191,6 +192,32 @@ export async function tumorSafety(spec: any = {}): Promise<any> {
   });
   if (!res.ok) throw new Error((await res.json()).detail || 'Tumorigenicity safety failed');
   return res.json();
+}
+
+/** Tissue-repair projection for cell / MSC therapies (replaces age reversal). */
+export async function regeneration(spec: any = {}): Promise<any> {
+  const res = await fetch(api('/api/regeneration'), {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(spec),
+  });
+  if (!res.ok) throw new Error((await res.json()).detail || 'Regeneration failed');
+  return res.json();
+}
+
+/** IV exosome carrier for a regenerative cell therapy (cell-modality construct). */
+export async function exosomeCarrier(spec: any = {}): Promise<any> {
+  const res = await fetch(api('/api/exosome_carrier'), {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(spec),
+  });
+  if (!res.ok) throw new Error((await res.json()).detail || 'Exosome carrier failed');
+  return res.json();
+}
+
+/** reprogramming (OSK/age-reversal) vs cell (MSC/exosome) — matches the backend rule. */
+export function modalityOf(d: { department?: string; disease?: string; modality?: string } | null | undefined): 'reprogramming' | 'cell' {
+  if (d?.modality) return d.modality as 'reprogramming' | 'cell';
+  if (d?.department === 'Age Rejuvenation') return 'reprogramming';
+  if (/persona reversal|epigenetic reprogramming/i.test(d?.disease || '')) return 'reprogramming';
+  return 'cell';
 }
 
 /** Step 8 — personalized immune / adverse-event safety envelope. */

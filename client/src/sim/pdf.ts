@@ -52,7 +52,8 @@ export function exportSimPdf(p: any, filename = 'StemCells-Simulator-Report.pdf'
   txt(WHITE); doc.setFont('helvetica', 'bold'); doc.setFontSize(16);
   doc.text('StemCells Protocol — Simulator Report', M + 44, M + 24);
   doc.setFont('helvetica', 'normal'); doc.setFontSize(9); txt(tint(WHITE, 1));
-  doc.text('Personalised epigenetic reprogramming & safety envelope', M + 44, M + 38);
+  const isReprogHdr = (p.modality || 'reprogramming') === 'reprogramming';
+  doc.text(isReprogHdr ? 'Personalised epigenetic reprogramming & safety envelope' : 'Personalised regenerative cell therapy & safety envelope', M + 44, M + 38);
   doc.setFont('helvetica', 'italic'); doc.setFontSize(8); txt([219, 230, 255]);
   doc.text('Research / illustrative — not medical advice.', M + 44, M + 50);
   y = M + 58 + 14;
@@ -350,7 +351,10 @@ export function exportSimPdf(p: any, filename = 'StemCells-Simulator-Report.pdf'
   need(40);
   fill(tint(PRIMARY, 0.07)); doc.roundedRect(M, y, CW, 34, 4, 4, 'F'); stroke(tint(PRIMARY, 0.4)); doc.setLineWidth(0.5); doc.roundedRect(M, y, CW, 34, 4, 4);
   txt(SUB); doc.setFont('helvetica', 'italic'); doc.setFontSize(7.5);
-  doc.text(doc.splitTextToSize('Epigenetic age is computed from your data with the published Horvath (2013) clock, on your device. The construct is a deterministic assembly of standard parts. Figures are research/illustrative — the age-reversal projection is a model estimate, not a measured outcome; the safety envelope estimates and mitigates tumorigenicity risk, it does not eliminate it. Not medical advice.', CW - 16), M + 8, y + 12);
+  const disc = isReprog
+    ? 'Epigenetic age is computed from your data with the published Horvath (2013) clock, on your device. The construct is a deterministic assembly of standard parts. Figures are research/illustrative — the age-reversal projection is a model estimate, not a measured outcome; the safety envelope estimates and mitigates tumorigenicity risk, it does not eliminate it. Not medical advice.'
+    : 'Epigenetic age is computed from your data with the published Horvath (2013) clock, on your device. The regeneration projection and exosome carrier are illustrative research designs, not measured outcomes; the immune / adverse-event read is a relative, probabilistic estimate — not a diagnosis or a yes/no prediction. Not medical advice.';
+  doc.text(doc.splitTextToSize(disc, CW - 16), M + 8, y + 12);
 
   doc.save(filename);
 }

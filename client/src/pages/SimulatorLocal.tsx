@@ -3,6 +3,7 @@ import Icon from '../components/Icon';
 import SimHeaderBand from '../components/SimHeaderBand';
 import SimulatorChat from './SimulatorChat';
 import { impliedCondition } from '../sim/immune';
+import { projectRegeneration } from '../sim/pipeline';
 import ConditionPicker from '../components/ConditionPicker';
 import {
   analyze,
@@ -10,10 +11,12 @@ import {
   convertWgbs,
   datasetSamples,
   engines,
+  exosomeCarrier,
   getCatalog,
   interpret,
   listConverted,
   listSamples,
+  modalityOf,
   reportCsv,
   reportPdf,
   safetyPrescreen,
@@ -65,6 +68,7 @@ export default function SimulatorLocal() {
   const [immune, setImmune] = useState<any>(null);         // Step 8 immune / adverse-event envelope
   const [immuneBusy, setImmuneBusy] = useState(false);
   const [comorbid, setComorbid] = useState<string[]>([]);  // Step 8 comorbidity multi-select
+  const [exosome, setExosome] = useState<any>(null);       // cell modality: IV exosome carrier
   const [analysis, setAnalysis] = useState<any>(null);
   const [construct, setConstruct] = useState<any>(null);
   const [ranked, setRanked] = useState<any>(null);
@@ -101,6 +105,8 @@ export default function SimulatorLocal() {
     () => catalog?.diseases.find((d) => d.key === diseaseKey) ?? null,
     [catalog, diseaseKey],
   );
+  const isReprog = useMemo(() => modalityOf(disease) === 'reprogramming', [disease]);
+  const cycleLabel = isReprog ? 'Reprogramming cycles' : 'Stem-cell therapy cycles';
 
   // When the disease changes, reset the downstream state and preset the approach.
   const pickDisease = (key: string) => {
@@ -111,6 +117,7 @@ export default function SimulatorLocal() {
     setMethFile(null);
     setAnalysis(null);
     setConstruct(null);
+    setExosome(null);
     setRanked(null);
     setInterpretation(null);
     setBatch(null);
@@ -231,6 +238,7 @@ export default function SimulatorLocal() {
     setBusy('Computing epigenetic age…');
     setAnalysis(null);
     setConstruct(null);
+    setExosome(null);
     setRanked(null);
     setInterpretation(null);
     setCycles(1);
@@ -257,24 +265,28 @@ export default function SimulatorLocal() {
   };
 
   const ctype = disease?.construct_type;
-  const isStructuredConstruct = ctype === 'gene_replacement' || ctype === 'epigenetic_silencing';
   const constructTitle =
-    ctype === 'gene_replacement' ? 'Micro-dystrophin gene-replacement construct'
+    !isReprog ? 'IV exosome carrier (regenerative)'
+    : ctype === 'gene_replacement' ? 'Micro-dystrophin gene-replacement construct'
     : ctype === 'epigenetic_silencing' ? 'Anti-DUX4 silencing construct'
     : 'Persona Reversal OSK Tet-On construct';
 
   const runConstruct = async () => {
-    setBusy(isStructuredConstruct ? `Assembling ${constructTitle.toLowerCase()}…` : 'Assembling OSK Tet-On construct…');
+    setBusy(`Assembling ${constructTitle.toLowerCase()}…`);
     try {
-      setConstruct(
-        await assembleConstruct({
-          construct_type: disease?.construct_type,
-          capsid: disease?.capsid || 'aav9',
-          tissue_key: disease?.tissue_key,
-          tissue_label: disease?.tissue,
-          objectives: analysis?.objectives || [],
-        }),
-      );
+      if (!isReprog) {
+        setExosome(await exosomeCarrier({ tissue_key: disease?.tissue_key, tissue_label: disease?.tissue }));
+      } else {
+        setConstruct(
+          await assembleConstruct({
+            construct_type: disease?.construct_type,
+            capsid: disease?.capsid || 'aav9',
+            tissue_key: disease?.tissue_key,
+            tissue_label: disease?.tissue,
+            objectives: analysis?.objectives || [],
+          }),
+        );
+      }
     } finally {
       setBusy('');
     }
@@ -390,7 +402,13 @@ export default function SimulatorLocal() {
   };
 
   const extras = () => ({
-    safety, tumor, immune, cycles, rejView,
+    safety, tumor: isReprog ? tumor : undefined, immune, cycles, rejView,
+    modality: isReprog ? 'reprogramming' : 'cell',
+    regeneration: !isReprog && regenView ? {
+      doses: cycles, regeneration_index: regenView.regeneration_index,
+      per_dose: regenView.per_dose, tissue_key: regenView.tissue_key, basis: regenView.basis,
+    } : undefined,
+    exosome: !isReprog ? exosome : undefined,
     sample: sample || datasetLabel || undefined,
     chronoAge: age ? Number(age) : null,
   });
@@ -442,6 +460,13 @@ export default function SimulatorLocal() {
       per, floor, eff,
     };
   }, [analysis, cycles]);
+
+  // Cell modality: tissue-repair projection (replaces age reversal).
+  const regenView = useMemo(() => {
+    const cov = analysis?.epigenetic_age?.coverage;
+    if (cov == null) return null;
+    return projectRegeneration(disease?.tissue_key, cov, cycles);
+  }, [analysis, cycles, disease]);
 
   if (mode === 'chat') return <SimulatorChat onExit={() => setMode('advanced')} />;
 
@@ -677,19 +702,22 @@ export default function SimulatorLocal() {
                         tone={ea.age_acceleration > 0 ? 'bad' : 'good'} />
                 )}
                 <Stat label="CpG coverage" value={`${Math.round(ea.coverage * 100)}%`} />
-                {analysis.rejuvenation && rejView && (
+                {isReprog && analysis.rejuvenation && rejView && (
                   <>
                     <Stat label={`Age reversal (projected)${cycles > 1 ? ` · ${cycles} cycles` : ''}`} value={`−${rejView.years_reversed} yr`} tone="good" />
                     <Stat label="Tissue rejuvenation (projected)" value={`${analysis.rejuvenation.tissue_rejuvenation_index}%`} tone="good" />
                   </>
                 )}
+                {!isReprog && regenView && (
+                  <Stat label={`Regeneration (projected)${cycles > 1 ? ` · ${cycles} doses` : ''}`} value={`${regenView.regeneration_index}%`} tone="good" />
+                )}
               </div>
 
-              {/* Reprogramming cycles — compounding projection with diminishing returns */}
-              {analysis.rejuvenation && rejView && (
+              {/* Cycles stepper — reprogramming projection OR regeneration projection */}
+              {((isReprog && rejView) || (!isReprog && regenView)) && (
                 <div className="mt-3 rounded-xl border border-cream-300 bg-cream-50 p-3">
                   <div className="flex flex-wrap items-center gap-3">
-                    <span className="text-sm font-semibold text-ink-800">Reprogramming cycles</span>
+                    <span className="text-sm font-semibold text-ink-800">{cycleLabel}</span>
                     <div className="flex items-center gap-2">
                       <button onClick={() => setCycles((c) => Math.max(1, c - 1))} disabled={cycles <= 1}
                               className="h-7 w-7 rounded-full border border-cream-300 bg-white text-ink-800 disabled:opacity-40">−</button>
@@ -697,24 +725,41 @@ export default function SimulatorLocal() {
                       <button onClick={() => setCycles((c) => Math.min(10, c + 1))} disabled={cycles >= 10}
                               className="h-7 w-7 rounded-full border border-cream-300 bg-white text-ink-800 disabled:opacity-40">+</button>
                     </div>
-                    <span className="text-xs text-ink-700/60">
-                      {ea.dnam_age} → <b className="text-ink-900">{rejView.projected_age} yr</b> after {cycles} cycle{cycles > 1 ? 's' : ''} (−{rejView.years_reversed} yr)
-                    </span>
+                    {isReprog && rejView ? (
+                      <span className="text-xs text-ink-700/60">
+                        {ea.dnam_age} → <b className="text-ink-900">{rejView.projected_age} yr</b> after {cycles} cycle{cycles > 1 ? 's' : ''} (−{rejView.years_reversed} yr)
+                      </span>
+                    ) : regenView ? (
+                      <span className="text-xs text-ink-700/60">
+                        tissue-repair <b className="text-ink-900">{regenView.regeneration_index}%</b> after {cycles} dose{cycles > 1 ? 's' : ''} ({disease?.tissue})
+                      </span>
+                    ) : null}
                   </div>
-                  {cycles > 1 && (
+                  {isReprog && rejView && cycles > 1 && (
                     <p className="mt-2 break-words text-[11px] text-ink-700/60">
                       Per cycle: {rejView.per.map((p) => `${p.projected}`).join(' → ')} yr.
                       Reversal <b>compounds with diminishing returns</b> toward the ~{rejView.floor}-yr young-adult floor —
                       it never goes below it, so cycles are <b>not</b> additive (2 cycles ≠ 2×).
                     </p>
                   )}
+                  {!isReprog && regenView && cycles > 1 && (
+                    <p className="mt-2 break-words text-[11px] text-ink-700/60">
+                      Per dose: {regenView.per_dose.map((p: any) => `${p.repaired}%`).join(' → ')}.
+                      Repair <b>compounds with diminishing returns</b> — doses are <b>not</b> additive.
+                    </p>
+                  )}
                 </div>
               )}
 
               <p className="mt-2 text-xs text-ink-700/50">Clock: {ea.clock} · {ea.n_used}/{ea.n_total} CpGs.</p>
-              {analysis.rejuvenation && rejView && (
+              {isReprog && analysis.rejuvenation && rejView && (
                 <p className="mt-1 text-xs text-ink-700/50">
                   Projected DNAm age after {cycles} reprogramming cycle{cycles > 1 ? 's' : ''}: <b>{rejView.projected_age} yr</b>. {analysis.rejuvenation.basis}
+                </p>
+              )}
+              {!isReprog && regenView && (
+                <p className="mt-1 text-xs text-ink-700/50">
+                  Projected tissue-repair after {cycles} dose{cycles > 1 ? 's' : ''}: <b>{regenView.regeneration_index}%</b>. {regenView.basis}
                 </p>
               )}
 
@@ -865,21 +910,47 @@ export default function SimulatorLocal() {
               <span className="text-xs font-normal text-ink-700/50"> · Track A</span>
             </h2>
             {disease && (
-              <p className="mt-1 text-xs text-ink-700/60">Presets for <b>{disease.disease}</b>: {disease.tissue} · capsid {disease.capsid.toUpperCase()}.</p>
+              <p className="mt-1 text-xs text-ink-700/60">Presets for <b>{disease.disease}</b>: {disease.tissue}{isReprog ? ` · capsid ${disease.capsid.toUpperCase()}` : ' · IV exosome carrier'}.</p>
             )}
-            {ctype === 'gene_replacement' && (
+            {isReprog && ctype === 'gene_replacement' && (
               <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
                 Muscular dystrophy is a <b>genetic</b> disease — this delivers a working gene, it does not reprogram the epigenome.
                 The right modality is <b>mutation-dependent</b> and needs the patient's dystrophin genotype.
               </p>
             )}
-            {ctype === 'epigenetic_silencing' && (
+            {isReprog && ctype === 'epigenetic_silencing' && (
               <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
                 FSHD is <b>epigenetic</b>: D4Z4 hypomethylation de-represses the toxic <b>DUX4</b> gene. This construct switches
                 DUX4 back <b>off</b> (RNAi) — the mechanism-correct fix, distinct from gene replacement or generic reprogramming.
               </p>
             )}
-            {!construct ? (
+            {!isReprog ? (
+              !exosome ? (
+                <button onClick={runConstruct} disabled={!!busy} className="btn-outline mt-4 px-5 py-2.5 disabled:opacity-50">Assemble IV exosome carrier</button>
+              ) : (
+                <div className="mt-3 text-sm">
+                  <p><b>Carrier:</b> {exosome.strategy || exosome.carrier} · {exosome.vesicle_size_nm} nm · <b>Route:</b> {exosome.route}</p>
+                  <div className="mt-2 grid gap-2">
+                    <div className="rounded-xl bg-cream-100 p-3">
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-700/50">Cargo</p>
+                      <p className="text-xs text-ink-800">{exosome.cargo}</p>
+                    </div>
+                    <div className="rounded-xl bg-cream-100 p-3">
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-700/50">Targeting</p>
+                      <p className="text-xs text-ink-800">{exosome.targeting?.tissue} — {exosome.targeting?.ligand}</p>
+                      <p className="mt-0.5 text-[11px] text-ink-700/60">{exosome.targeting?.note}</p>
+                    </div>
+                    <div className="rounded-xl bg-cream-100 p-3">
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-700/50">Source</p>
+                      <p className="text-xs text-ink-800">{exosome.source_cell}</p>
+                    </div>
+                  </div>
+                  <ul className="mt-2 list-disc pl-4 text-xs text-ink-700/70">
+                    {(exosome.advantages || []).slice(0, 4).map((a: string) => <li key={a}>{a}</li>)}
+                  </ul>
+                </div>
+              )
+            ) : !construct ? (
               <button onClick={runConstruct} disabled={!!busy} className="btn-outline mt-4 px-5 py-2.5 disabled:opacity-50">Assemble construct</button>
             ) : (construct.construct_type !== 'reprogramming' && construct.payload) ? (
               <div className="mt-3 text-sm">
@@ -1067,8 +1138,8 @@ export default function SimulatorLocal() {
         </section>
       )}
 
-      {/* 7 · Personalized Tumorigenicity Safety envelope */}
-      {analysis && (
+      {/* 7 · Personalized Tumorigenicity Safety envelope (reprogramming modality only) */}
+      {analysis && isReprog && (
         <section className="mt-6">
           <div className="card p-6">
             <h2 className="font-display text-lg font-bold text-ink-900">7 · Tumorigenicity Safety <span className="text-xs font-normal text-ink-700/50">· personalized OSK dosing envelope</span></h2>
@@ -1315,27 +1386,31 @@ function buildPayload(
   ranked: any,
   interpretation?: string | null,
   disease?: DiseaseEntry | null,
-  extras?: { safety?: any; tumor?: any; immune?: any; cycles?: number; rejView?: any; sample?: string; chronoAge?: number | null },
+  extras?: { safety?: any; tumor?: any; immune?: any; cycles?: number; rejView?: any; modality?: string; regeneration?: any; exosome?: any; sample?: string; chronoAge?: number | null },
 ) {
-  const { safety, tumor, immune, cycles, rejView, sample, chronoAge } = extras || {};
+  const { safety, tumor, immune, cycles, rejView, modality, regeneration, exosome, sample, chronoAge } = extras || {};
+  const isReprog = (modality || 'reprogramming') === 'reprogramming';
   const rej = analysis?.rejuvenation;
   return {
     disease: disease ? { name: disease.disease, department: disease.department, tissue: disease.tissue, capsid: disease.capsid } : undefined,
+    modality: modality || 'reprogramming',
     sample: sample || undefined,
     chronological_age: chronoAge ?? undefined,
     epigenetic_age: analysis?.epigenetic_age,
-    rejuvenation: rej ? {
+    rejuvenation: isReprog && rej ? {
       cycles: cycles ?? 1,
       projected_age: rejView?.projected_age,
       years_reversed: rejView?.years_reversed,
       tissue_rejuvenation_index: rej.tissue_rejuvenation_index,
       basis: rej.basis,
     } : undefined,
+    regeneration: !isReprog ? regeneration : undefined,   // cell — tissue repair
     targets: analysis?.targets,
-    construct,
+    construct: isReprog ? construct : undefined,
+    exosome: !isReprog ? exosome : undefined,             // cell — IV exosome carrier
     candidates: ranked?.candidates,
     safety: safety || undefined,     // Step 6 — avatar pre-screen
-    tumor: tumor || undefined,       // Step 7 — tumorigenicity safety envelope
+    tumor: tumor || undefined,       // Step 7 — tumorigenicity (reprogramming only)
     immune: immune || undefined,     // Step 8 — immune / adverse-event envelope
     interpretation: interpretation || undefined,
   };
