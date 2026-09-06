@@ -103,8 +103,18 @@ function loadMessages(): UIMsg[] {
   }
 }
 
+const OPEN_KEY = 'scp_chat_open';
+
 export default function ChatWidget() {
-  const [open, setOpen] = useState(false);
+  // Persist the open state for the browser session so a remount (e.g. a mobile
+  // browser reloading the page after the native file picker, or a parent
+  // re-render) does not "kick the user out" of the chat mid-upload.
+  const [open, setOpen] = useState<boolean>(() => {
+    try { return sessionStorage.getItem(OPEN_KEY) === '1'; } catch { return false; }
+  });
+  useEffect(() => {
+    try { sessionStorage.setItem(OPEN_KEY, open ? '1' : '0'); } catch { /* ignore */ }
+  }, [open]);
   const [messages, setMessages] = useState<UIMsg[]>(loadMessages);
   const [input, setInput] = useState('');
   const [attachments, setAttachments] = useState<Attachment[]>([]);
@@ -553,6 +563,7 @@ export default function ChatWidget() {
       {/* Launcher — sits above the hero search card */}
       {!open && (
         <button
+          type="button"
           onClick={() => setOpen(true)}
           className="group mb-5 flex w-full max-w-2xl items-center gap-3 rounded-2xl bg-white/10 p-3 text-left ring-1 ring-white/15 backdrop-blur transition hover:bg-white/15 sm:p-4"
         >
@@ -630,6 +641,7 @@ export default function ChatWidget() {
                 </div>
               )}
               <button
+                type="button"
                 onClick={() => setOpen(false)}
                 aria-label="Minimise chat"
                 className="grid h-8 w-8 place-items-center rounded-lg text-white/70 transition hover:bg-white/10 hover:text-white"
@@ -804,22 +816,24 @@ export default function ChatWidget() {
                 </button>
               </div>
               <div className="flex items-end gap-2">
-                <input
-                  ref={fileRef}
-                  type="file"
-                  accept="image/*,application/pdf,.csv,.cov,.tsv,.txt,.bedgraph,.bed"
-                  multiple
-                  className="hidden"
-                  onChange={(e) => pickFiles(e.target.files)}
-                />
-                <button
-                  onClick={() => fileRef.current?.click()}
+                {/* Native <label> trigger: tapping it opens the OS file picker
+                    directly (no JS .click() on a display:none input, which some
+                    mobile browsers drop). The input stays in the DOM. */}
+                <label
                   aria-label="Attach a file"
                   title="Attach a DNA-methylation file (array beta .csv with cg IDs, or a .cov/bedGraph), or an ECG / scan / report (image, PDF)"
-                  className="grid h-11 w-11 shrink-0 place-items-center rounded-xl border border-cream-300 text-ink-700/70 transition hover:border-clay-400 hover:text-clay-600"
+                  className="grid h-11 w-11 shrink-0 cursor-pointer place-items-center rounded-xl border border-cream-300 text-ink-700/70 transition hover:border-clay-400 hover:text-clay-600"
                 >
+                  <input
+                    ref={fileRef}
+                    type="file"
+                    accept="image/*,application/pdf,.csv,.cov,.tsv,.txt,.bedgraph,.bed"
+                    multiple
+                    className="sr-only"
+                    onChange={(e) => pickFiles(e.target.files)}
+                  />
                   <ClipIcon />
-                </button>
+                </label>
                 <textarea
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
@@ -830,6 +844,7 @@ export default function ChatWidget() {
                 />
                 {speechSupported && (
                   <button
+                    type="button"
                     onClick={toggleVoice}
                     aria-label={listening ? 'Stop voice input' : 'Speak your question'}
                     className={`grid h-11 w-11 shrink-0 place-items-center rounded-xl border transition ${
@@ -846,6 +861,7 @@ export default function ChatWidget() {
                 )}
                 {busy ? (
                   <button
+                    type="button"
                     onClick={stop}
                     aria-label="Stop"
                     className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-ink-900 text-white"
@@ -856,6 +872,7 @@ export default function ChatWidget() {
                   </button>
                 ) : (
                   <button
+                    type="button"
                     onClick={() => send()}
                     aria-label="Send"
                     disabled={!input.trim() && attachments.length === 0}
