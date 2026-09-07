@@ -9,6 +9,27 @@ import { STANDARDS, DISCLAIMER } from '../protocols/standards';
  * so cell, stem-cell, regenerative and gene therapies can be administered to one
  * repeatable, documented worldwide standard. Static + on-device; no backend.
  */
+
+// Delivery routes used across the registry (mirrors registry ROUTE_STEPS).
+type Scope = 'Systemic' | 'Local' | 'Surface' | 'Targeted';
+const SCOPE_STYLE: Record<Scope, string> = {
+  Systemic: 'bg-blue-50 text-blue-700',
+  Local: 'bg-green-50 text-green-700',
+  Surface: 'bg-amber-50 text-amber-700',
+  Targeted: 'bg-purple-50 text-purple-700',
+};
+const ROUTES: { icon: IconName; name: string; scope: Scope; blurb: string }[] = [
+  { icon: 'syringe', name: 'IV infusion', scope: 'Systemic', blurb: 'Into a vein, travelling the bloodstream — used for systemic/immune conditions. Large cells are trapped in the lungs and cleared within 1–2 days, so the effect is a paracrine “hit-and-run”; carries the embolic / IBMIR clotting risk the Simulator screens for.' },
+  { icon: 'flask', name: 'Intra-articular', scope: 'Local', blurb: 'Directly into a joint space (e.g. knee osteoarthritis) — delivers a high local cell dose and avoids the lung trap.' },
+  { icon: 'syringe', name: 'Local injection', scope: 'Local', blurb: 'Into the target tissue itself — perianal fistula, intervertebral disc, tendon, skin or dental sites.' },
+  { icon: 'brain', name: 'Intrathecal', scope: 'Local', blurb: 'Into the cerebrospinal fluid via lumbar puncture, to reach neurological targets (ALS, spinal-cord injury).' },
+  { icon: 'heart', name: 'Intracoronary / Intramyocardial', scope: 'Local', blurb: 'Via catheter into the coronary arteries or the heart muscle, for cardiac repair after infarction or in heart failure.' },
+  { icon: 'stethoscope', name: 'Intramuscular', scope: 'Local', blurb: 'Depot injections spread across a muscle group — e.g. to drive angiogenesis in critical limb ischaemia.' },
+  { icon: 'clinician', name: 'Surgical implant', scope: 'Local', blurb: 'Cells (often on a scaffold) seated into a prepared defect in theatre — bone, cartilage, cornea or retina.' },
+  { icon: 'dish', name: 'Topical / surface', scope: 'Surface', blurb: 'Applied to skin or a wound surface, often through micro-channels or as a growth-factor-rich membrane graft.' },
+  { icon: 'microscope', name: 'Portal / Subretinal', scope: 'Targeted', blurb: 'Organ-specific access — portal vein for liver or islet cells, subretinal delivery beneath the retina for eye therapies.' },
+];
+
 export default function Protocols() {
   const [cat, setCat] = useState<Category | 'ALL'>('ALL');
   const [q, setQ] = useState('');
@@ -78,6 +99,65 @@ export default function Protocols() {
             </div>
           ))}
         </div>
+      </section>
+
+      {/* Delivery routes explainer */}
+      <section className="container-x border-t border-cream-300 py-10">
+        <h2 className="font-display text-2xl font-extrabold text-ink-900">How therapies are delivered</h2>
+        <p className="mt-1 max-w-3xl text-ink-700/70">
+          The delivery route decides how a therapy reaches its target — and, with living cells, it drives both the
+          mechanism and the risk profile. Every coded protocol states its route; here is what each one means.
+        </p>
+
+        {/* cells vs cell-free (answers "where do IV exosomes fit?") */}
+        <div className="mt-5 grid gap-4 lg:grid-cols-2">
+          <div className="rounded-2xl border border-cream-300 bg-cream-50 p-5">
+            <div className="flex items-center gap-2">
+              <span className="icon-tile h-9 w-9"><Icon name="dna" className="h-5 w-5" /></span>
+              <h3 className="font-display text-base font-bold text-ink-900">MSC therapy — delivering living cells</h3>
+            </div>
+            <p className="mt-3 text-sm leading-relaxed text-ink-700/80">
+              MSCs (mesenchymal stromal cells) are living cells, so delivery is about getting them where they act.
+              <b> Systemic (IV)</b> sends them through the bloodstream — most are trapped in the lung capillaries within
+              minutes and cleared in 1–2 days, so the benefit is a paracrine <i>“hit-and-run”</i> anti-inflammatory /
+              immunomodulatory effect, not permanent engraftment. Because the cells are large, IV also carries the
+              embolic / clotting (IBMIR) risk our Simulator screens for. <b>Local delivery</b> (into a joint, the CSF,
+              or the target tissue) instead places a high cell dose exactly where it is needed and avoids the lung trap.
+            </p>
+          </div>
+          <div className="rounded-2xl p-5" style={{ background: 'rgba(168,85,247,0.06)', border: '1px solid rgba(168,85,247,0.25)' }}>
+            <div className="flex items-center gap-2">
+              <span className="icon-tile h-9 w-9"><Icon name="heart" className="h-5 w-5" /></span>
+              <h3 className="font-display text-base font-bold text-ink-900">Where IV exosomes fit — the cell-free signal</h3>
+            </div>
+            <p className="mt-3 text-sm leading-relaxed text-ink-700/80">
+              Exosomes are <b>not a delivery route for MSCs</b> — they are a different product: the cell-free
+              “message in a bottle” that MSCs secrete (nano-vesicles carrying the same paracrine cargo). IV exosomes
+              infuse that signal directly, without the living cell — so they are ~1,000× smaller, <b>skip the lung trap
+              and the clot / tumour risk</b>, and can biodistribute more freely (even toward the CNS). The trade-offs:
+              <b> no consensus dose</b> (particle-count based) and they remain <b>investigational / not approved</b> for
+              most uses. This is why the modality-aware Simulator swaps in an <b>IV exosome carrier</b> for MSC-class therapies.
+            </p>
+          </div>
+        </div>
+
+        {/* route reference grid */}
+        <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {ROUTES.map((r) => (
+            <div key={r.name} className="card p-4">
+              <div className="flex items-center gap-2">
+                <span className="icon-tile h-8 w-8"><Icon name={r.icon} className="h-4 w-4" /></span>
+                <h4 className="font-display text-sm font-bold text-ink-900">{r.name}</h4>
+                <span className={`chip ml-auto ${SCOPE_STYLE[r.scope]}`}>{r.scope}</span>
+              </div>
+              <p className="mt-2 text-xs leading-relaxed text-ink-700/70">{r.blurb}</p>
+            </div>
+          ))}
+        </div>
+        <p className="mt-3 text-xs italic text-ink-700/55">
+          Scope: <b>Systemic</b> = whole-body via the circulation · <b>Local</b> = placed at the target · <b>Surface</b> =
+          skin / wound · <b>Targeted</b> = organ-specific access. Route detail and risks are listed on each protocol page.
+        </p>
       </section>
 
       {/* Registry */}
